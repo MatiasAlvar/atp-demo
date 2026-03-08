@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase, getSolicitudes, updateEstado, fromDb } from './lib/supabase.js'
+import { supabase, getSolicitudes, updateEstado, fromDb } from '../lib/supabase.js'
 import { SITIOS, TRABAJO_INFORMAL, C, ESTADO_COLOR } from './shared/data.js'
 import { ATPLogo, GlobalStyle, Badge } from './shared/components.jsx'
 
