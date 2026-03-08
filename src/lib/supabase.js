@@ -1,0 +1,111 @@
+import { createClient } from '@supabase/supabase-js'
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON)
+
+// ── SOLICITUDES ───────────────────────────────────────────────
+export async function getSolicitudes() {
+  const { data, error } = await supabase
+    .from('solicitudes')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) { console.error(error); return [] }
+  return data
+}
+
+export async function upsertSolicitud(sol) {
+  const { data, error } = await supabase
+    .from('solicitudes')
+    .upsert(toDb(sol), { onConflict: 'id' })
+    .select()
+  if (error) { console.error(error); return null }
+  return data?.[0]
+}
+
+export async function updateEstado(id, estado, extra = {}) {
+  const patch = { estado, ...extra }
+  if (estado === 'Autorizado') patch.ts_autorizado = new Date().toISOString()
+  const { error } = await supabase.from('solicitudes').update(patch).eq('id', id)
+  if (error) console.error(error)
+}
+
+// ── ALERTAS ───────────────────────────────────────────────────
+export async function getAlertas() {
+  const { data, error } = await supabase.from('alertas').select('*').order('created_at', { ascending: false })
+  if (error) { console.error(error); return [] }
+  return data
+}
+
+export async function upsertAlerta(alerta) {
+  const { error } = await supabase.from('alertas').upsert(alerta, { onConflict: 'id' })
+  if (error) console.error(error)
+}
+
+export async function resolverAlerta(id) {
+  const { error } = await supabase.from('alertas').update({ estado: 'resuelto' }).eq('id', id)
+  if (error) console.error(error)
+}
+
+// ── SUBSCRIPTIONS ─────────────────────────────────────────────
+export function subscribeSolicitudes(callback) {
+  return supabase.channel('solicitudes-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'solicitudes' }, callback)
+    .subscribe()
+}
+
+export function subscribeAlertas(callback) {
+  return supabase.channel('alertas-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'alertas' }, callback)
+    .subscribe()
+}
+
+// ── HELPERS ───────────────────────────────────────────────────
+function toDb(sol) {
+  return {
+    id: sol.id,
+    ref_cliente: sol.refCliente || '',
+    operador: sol.operador || '',
+    empresa_rut: sol.empresa || '',
+    empresa_nombre: sol.empresaNombre || '',
+    trabajo: sol.trabajo || '',
+    sitio_id: sol.sitio || '',
+    desde: sol.desde || null,
+    hasta: sol.hasta || null,
+    zona: sol.zona || '',
+    estado: sol.estado || 'Borrador',
+    auto: sol.auto || false,
+    motivo: sol.motivo || '',
+    correo_mandante: sol.correoMandante || '',
+    correo_contratista: sol.correoContratista || '',
+    trabajadores: sol.trabajadores || [],
+    historial: sol.historial || [],
+    ts_enviado: sol.tsEnviado || null,
+    ts_autorizado: sol.tsAutorizado || null,
+  }
+}
+
+export function fromDb(row) {
+  return {
+    id: row.id,
+    refCliente: row.ref_cliente || '',
+    operador: row.operador,
+    empresa: row.empresa_rut || '',
+    empresaNombre: row.empresa_nombre || '',
+    trabajo: row.trabajo || '',
+    sitio: row.sitio_id || '',
+    desde: row.desde || '',
+    hasta: row.hasta || '',
+    zona: row.zona || '',
+    estado: row.estado || 'Borrador',
+    auto: row.auto || false,
+    motivo: row.motivo || '',
+    correoMandante: row.correo_mandante || '',
+    correoContratista: row.correo_contratista || '',
+    trabajadores: row.trabajadores || [],
+    historial: row.historial || [],
+    tsEnviado: row.ts_enviado || '',
+    tsAutorizado: row.ts_autorizado || '',
+  }
+}
