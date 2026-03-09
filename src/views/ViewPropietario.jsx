@@ -22,7 +22,19 @@ export default function ViewPropietario({ user, onLogout }) {
   useEffect(() => {
     cargar()
     const ch = supabase.channel('prop-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'solicitudes' }, cargar)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'solicitudes' }, (payload) => {
+        // Actualizar solo la solicitud que cambió, no recargar todo
+        if (payload.eventType === 'UPDATE' && payload.new) {
+          const updated = fromDb(payload.new)
+          setSolicitudes(prev => {
+            const exists = prev.some(s => s.id === updated.id)
+            if (!exists) return prev // no es de este propietario
+            return prev.map(s => s.id === updated.id ? updated : s)
+          })
+        } else {
+          cargar()
+        }
+      })
       .subscribe()
     return () => supabase.removeChannel(ch)
   }, [])
@@ -61,11 +73,9 @@ export default function ViewPropietario({ user, onLogout }) {
       fecha: new Date().toLocaleString('es-CL'),
       auto: false,
     }]
-    // Optimistic update
-    setSolicitudes(prev => prev.map(s => s.id===solId ? {...s, estado:nuevoEstado, historial:nuevoHistorial} : s))
     await updateEstado(solId, nuevoEstado, { historial: nuevoHistorial, tsAutorizado: nuevoEstado==='Autorizado'?tsAut:undefined })
+    await cargar()
     setAccion({ id: solId, tipo: decision, done: true })
-    // NO llamar cargar() — el realtime lo hace automáticamente
   }
 
   const pendientes  = solicitudes.filter(s => s.estado === 'En Gestión Propietario')

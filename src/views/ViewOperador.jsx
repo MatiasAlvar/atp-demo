@@ -500,7 +500,10 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
             if (qn.length >= 2) return w.nombre.toLowerCase().includes(qn)
             return false
           }).slice(0,5)
-          const showSugs = sugs.length > 0 && (t.rut.length >= 3 || t.nombre.length >= 2) && !validRUT(t.rut)
+          const rutValido = validRUT(t.rut)
+          const rutEnBBDD = trabajadores.some(w => w.rut === t.rut)
+          const showSugs = sugs.length > 0 && (t.rut.length >= 3 || t.nombre.length >= 2) && !rutValido
+          const showNuevo = rutValido && !rutEnBBDD && t.nombre.length >= 3
 
           function autocompletar(w) {
             const nw = [...form.trabajadores]
@@ -523,14 +526,21 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
                     style={{...inp}}/>
                 </div>
                 <div style={{paddingTop:6,textAlign:'center',minWidth:90}}>
-                  {t.rut && validRUT(t.rut) && (
-                    <div style={{fontSize:10,fontWeight:700,color:acc===null?C.gray4:acc?C.green:C.red}}>
-                      {acc===null?'❓ Desconocido':acc?'✅ Acreditado':'❌ No acreditado'}
+                  {t.rut && rutValido && (
+                    <div style={{fontSize:10,fontWeight:700,color:rutEnBBDD?(acc?C.green:C.red):C.blue}}>
+                      {!rutEnBBDD?'🆕 Nuevo':acc?'✅ Acreditado':'❌ No acreditado'}
                     </div>
                   )}
                 </div>
                 {i>0&&<button onClick={()=>set('trabajadores',form.trabajadores.filter((_,j)=>j!==i))} style={{background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,padding:'8px',cursor:'pointer',color:C.red,fontSize:12}}>✕</button>}
               </div>
+              {/* Trabajador nuevo — RUT válido pero no en BBDD */}
+              {showNuevo && (
+                <div style={{background:'#E3F2FD',border:`1px solid ${C.blue}`,borderRadius:4,padding:'8px 12px',marginTop:2,fontSize:12,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <span>🆕 <strong>{t.nombre}</strong> — RUT no está en la BBDD. Se registrará como pendiente de acreditación al enviar la solicitud.</span>
+                  <span style={{color:C.blue,fontWeight:700,fontSize:11}}>✓ Se guardará automáticamente</span>
+                </div>
+              )}
               {/* Sugerencias de autocompletado */}
               {showSugs && (
                 <div style={{background:C.white,border:`1px solid ${C.blue}`,borderRadius:4,boxShadow:'0 4px 12px #0002',marginTop:2,zIndex:100,position:'relative'}}>

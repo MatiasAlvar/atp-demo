@@ -42,7 +42,12 @@ export default function ViewATP({ user, onLogout }) {
 
   useEffect(() => {
     cargar()
-    const ch1 = supabase.channel('atp-s').on('postgres_changes',{event:'*',schema:'public',table:'solicitudes'},cargar).subscribe()
+    const ch1 = supabase.channel('atp-s').on('postgres_changes',{event:'*',schema:'public',table:'solicitudes'},(payload)=>{
+      if (payload.eventType==='UPDATE' && payload.new) {
+        const updated = fromDb(payload.new)
+        setSolicitudes(prev => prev.map(s => s.id===updated.id ? updated : s))
+      } else { cargar() }
+    }).subscribe()
     const ch2 = supabase.channel('atp-a').on('postgres_changes',{event:'*',schema:'public',table:'alertas'},cargar).subscribe()
     return () => { supabase.removeChannel(ch1); supabase.removeChannel(ch2) }
   },[])
@@ -51,14 +56,9 @@ export default function ViewATP({ user, onLogout }) {
     const sol = solicitudes.find(s=>s.id===id)
     if(!sol) return
     const hist = [...(sol.historial||[]),{estado:'Autorizado',fecha:new Date().toLocaleString('es-CL'),auto:false}]
-    const tsAut = new Date().toISOString()
-    const solAut = {...sol, estado:'Autorizado', historial:hist, tsAutorizado:tsAut}
-    // Actualizar UI inmediatamente
-    setSolicitudes(prev => prev.map(s => s.id===id ? solAut : s))
-    // Guardar en DB
-    await updateEstado(id,'Autorizado',{historial:hist, tsAutorizado:tsAut})
+    await updateEstado(id,'Autorizado',{historial:hist, tsAutorizado:new Date().toISOString()})
+    await cargar()
     showNotif('✅ Acceso autorizado')
-    // NO llamar cargar() — el realtime lo hace automáticamente
   }
 
   const gestPend  = solicitudes.filter(s=>['Validado','En Gestión Propietario'].includes(s.estado)).length
