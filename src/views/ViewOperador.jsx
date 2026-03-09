@@ -634,8 +634,29 @@ Reglas críticas:
         messages=[{role:'user',content:[{type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},{type:'text',text:prompt}]}]
       } else if (['png','jpg','jpeg','webp'].includes(fileType)) {
         messages=[{role:'user',content:[{type:'image',source:{type:'base64',media_type:mt.startsWith('image/')?mt:'image/jpeg',data:base64}},{type:'text',text:prompt}]}]
+      } else if (['xlsx','xls'].includes(fileType)) {
+        // Para Excel: usar SheetJS para convertir a texto legible
+        const arrayBuffer = await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsArrayBuffer(file)})
+        // Cargar SheetJS si no está cargado
+        await new Promise((res,rej)=>{
+          if(window.XLSX){res();return}
+          const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s)
+        })
+        const wb = window.XLSX.read(arrayBuffer, {type:'array'})
+        // Convertir todas las hojas a texto CSV
+        let excelText = ''
+        wb.SheetNames.forEach(sheetName => {
+          const ws = wb.Sheets[sheetName]
+          const csv = window.XLSX.utils.sheet_to_csv(ws, {skipHidden:true})
+          // Filtrar líneas vacías
+          const lines = csv.split('\n').filter(l => l.replace(/,/g,'').trim() !== '')
+          if (lines.length > 0) {
+            excelText += `\n=== HOJA: ${sheetName} ===\n` + lines.join('\n')
+          }
+        })
+        messages=[{role:'user',content:`${prompt}\n\nContenido del archivo Excel (${file.name}):\n${excelText.slice(0,15000)}`}]
       } else {
-        // Para Excel/CSV: leer como texto
+        // Para CSV y otros texto
         const text = await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsText(file,'utf-8')})
         messages=[{role:'user',content:`${prompt}\n\nContenido del archivo (${file.name}, ${fileType.toUpperCase()}):\n${text.slice(0,12000)}`}]
       }
