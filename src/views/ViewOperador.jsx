@@ -635,25 +635,34 @@ Reglas críticas:
       } else if (['png','jpg','jpeg','webp'].includes(fileType)) {
         messages=[{role:'user',content:[{type:'image',source:{type:'base64',media_type:mt.startsWith('image/')?mt:'image/jpeg',data:base64}},{type:'text',text:prompt}]}]
       } else if (['xlsx','xls'].includes(fileType)) {
-        // Para Excel: usar SheetJS para convertir a texto legible
+        // Para Excel: usar SheetJS extrayendo celda por celda (soporta celdas combinadas)
         const arrayBuffer = await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsArrayBuffer(file)})
-        // Cargar SheetJS si no está cargado
         await new Promise((res,rej)=>{
           if(window.XLSX){res();return}
           const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s)
         })
-        const wb = window.XLSX.read(arrayBuffer, {type:'array'})
-        // Convertir todas las hojas a texto CSV
+        const wb = window.XLSX.read(arrayBuffer, {type:'array', cellText:true, cellDates:true})
         let excelText = ''
         wb.SheetNames.forEach(sheetName => {
           const ws = wb.Sheets[sheetName]
-          const csv = window.XLSX.utils.sheet_to_csv(ws, {skipHidden:true})
-          // Filtrar líneas vacías
-          const lines = csv.split('\n').filter(l => l.replace(/,/g,'').trim() !== '')
-          if (lines.length > 0) {
-            excelText += `\n=== HOJA: ${sheetName} ===\n` + lines.join('\n')
+          if (!ws || !ws['!ref']) return
+          // Extraer todas las celdas con valor, fila por fila
+          const range = window.XLSX.utils.decode_range(ws['!ref'])
+          const rows = []
+          for (let R = range.s.r; R <= range.e.r; R++) {
+            const rowVals = []
+            for (let C = range.s.c; C <= range.e.c; C++) {
+              const cell = ws[window.XLSX.utils.encode_cell({r:R, c:C})]
+              rowVals.push(cell ? String(cell.v ?? cell.w ?? '') : '')
+            }
+            const rowStr = rowVals.filter(v=>v.trim()).join('\t')
+            if (rowStr.trim()) rows.push(rowStr)
+          }
+          if (rows.length > 0) {
+            excelText += `\n=== HOJA: ${sheetName} ===\n` + rows.join('\n')
           }
         })
+        console.log('Excel extraído, chars:', excelText.length, '\nPrimeros 500:', excelText.slice(0,500))
         messages=[{role:'user',content:`${prompt}\n\nContenido del archivo Excel (${file.name}):\n${excelText.slice(0,15000)}`}]
       } else {
         // Para CSV y otros texto
