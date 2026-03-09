@@ -63,3 +63,42 @@ insert into alertas (id, sitio_id, tipo, titulo, descripcion, estado) values
 ('ALT002', 'CL31102', 'documentacion', 'Requiere permiso municipal adicional', 'Este sitio requiere adjuntar permiso de la Municipalidad de Valparaíso para trabajos de instalación.', 'activo'),
 ('ALT003', 'CL-TAR-5021', 'documentacion', 'Requiere coordinación con Gendarmería', 'Recinto penitenciario: coordinar con Gendarmería 72h antes. Adjuntar cédulas de todos los técnicos.', 'activo')
 on conflict (id) do nothing;
+
+-- ============================================================
+-- ACTUALIZACIÓN: Limpiar datos de prueba + tabla trabajadores
+-- Pega esto en SQL Editor → Run
+-- ============================================================
+
+-- Limpiar TODAS las solicitudes de prueba
+DELETE FROM solicitudes;
+
+-- Tabla trabajadores acreditados
+create table if not exists trabajadores (
+  id text primary key,
+  rut text not null unique,
+  nombre text not null,
+  empresa_rut text default '',
+  empresa_nombre text default '',
+  operador text default '',
+  acreditado boolean default true,
+  motivo_no_acreditado text default '',
+  vencimiento date,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+alter table trabajadores enable row level security;
+create policy "allow all trabajadores" on trabajadores for all using (true) with check (true);
+alter publication supabase_realtime add table trabajadores;
+
+-- Datos de ejemplo trabajadores
+insert into trabajadores (id, rut, nombre, empresa_rut, empresa_nombre, operador, acreditado, vencimiento) values
+('TRB001','12.345.678-9','Javier Hernández','76.124.890-1','Lari Obras y Servicios SpA','Telefónica Móviles Chile S.A.',true,'2026-12-31'),
+('TRB002','15.234.567-8','Ana Rodríguez','77.341.200-5','TelcoServ SpA','Entel PCS',true,'2026-09-30'),
+('TRB003','11.222.333-4','Carlos Muñoz','76.890.123-4','Network Solutions Ltda.','Claro Chile S.A.',true,'2026-11-30'),
+('TRB004','16.789.012-3','María González','77.012.345-6','Infratel SpA','WOM S.A.',true,'2026-08-31'),
+('TRB005','14.567.890-1','Roberto Soto','76.543.210-9','TecnoAndes SpA','Telefónica Móviles Chile S.A.',true,'2026-10-31'),
+('TRB006','13.456.789-2','Laura Castillo','76.124.890-1','Lari Obras y Servicios SpA','Entel PCS',false,'2026-01-15'),
+('TRB007','17.890.123-4','Diego Morales','77.341.200-5','TelcoServ SpA','Claro Chile S.A.',true,'2026-12-31'),
+('TRB008','18.901.234-5','Valentina Ríos','76.890.123-4','Network Solutions Ltda.','WOM S.A.',true,'2026-07-31')
+on conflict (id) do nothing;

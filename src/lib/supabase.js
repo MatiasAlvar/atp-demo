@@ -1,25 +1,19 @@
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON)
 
 // ── SOLICITUDES ───────────────────────────────────────────────
 export async function getSolicitudes() {
-  const { data, error } = await supabase
-    .from('solicitudes')
-    .select('*')
-    .order('created_at', { ascending: false })
+  const { data, error } = await supabase.from('solicitudes').select('*').order('created_at', { ascending: false })
   if (error) { console.error(error); return [] }
   return data
 }
 
 export async function upsertSolicitud(sol) {
-  const { data, error } = await supabase
-    .from('solicitudes')
-    .upsert(toDb(sol), { onConflict: 'id' })
-    .select()
+  const { data, error } = await supabase.from('solicitudes').upsert(toDb(sol), { onConflict: 'id' }).select()
   if (error) { console.error(error); return null }
   return data?.[0]
 }
@@ -48,15 +42,45 @@ export async function resolverAlerta(id) {
   if (error) console.error(error)
 }
 
+// ── TRABAJADORES ──────────────────────────────────────────────
+export async function getTrabajadores() {
+  const { data, error } = await supabase.from('trabajadores_acreditados').select('*').order('nombre')
+  if (error) { console.error(error); return [] }
+  return data
+}
+
+export async function upsertTrabajador(t) {
+  const { error } = await supabase.from('trabajadores_acreditados').upsert(t, { onConflict: 'id' })
+  if (error) console.error(error)
+}
+
+export async function deleteTrabajador(id) {
+  const { error } = await supabase.from('trabajadores_acreditados').delete().eq('id', id)
+  if (error) console.error(error)
+}
+
+// ── EMPRESAS ──────────────────────────────────────────────────
+export async function getEmpresas() {
+  const { data, error } = await supabase.from('empresas_contratistas').select('*').order('nombre')
+  if (error) { console.error(error); return [] }
+  return data
+}
+
+export async function upsertEmpresa(e) {
+  const { error } = await supabase.from('empresas_contratistas').upsert(e, { onConflict: 'rut' })
+  if (error) { console.error(error); return false }
+  return true
+}
+
 // ── SUBSCRIPTIONS ─────────────────────────────────────────────
 export function subscribeSolicitudes(callback) {
-  return supabase.channel('solicitudes-changes')
+  return supabase.channel('sol-' + Math.random())
     .on('postgres_changes', { event: '*', schema: 'public', table: 'solicitudes' }, callback)
     .subscribe()
 }
 
 export function subscribeAlertas(callback) {
-  return supabase.channel('alertas-changes')
+  return supabase.channel('alt-' + Math.random())
     .on('postgres_changes', { event: '*', schema: 'public', table: 'alertas' }, callback)
     .subscribe()
 }

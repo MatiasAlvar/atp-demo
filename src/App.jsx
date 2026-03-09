@@ -10,10 +10,7 @@ const SESSION_KEY = 'atp_session'
 
 export default function App() {
   const [user, setUser] = useState(() => {
-    try {
-      const saved = sessionStorage.getItem(SESSION_KEY)
-      return saved ? JSON.parse(saved) : null
-    } catch { return null }
+    try { const s=sessionStorage.getItem(SESSION_KEY); return s?JSON.parse(s):null } catch { return null }
   })
 
   function handleLogin(userData) {
@@ -26,12 +23,12 @@ export default function App() {
     try { sessionStorage.removeItem(SESSION_KEY) } catch {}
   }
 
-  // Handle propietario action from email link (no login needed)
+  // Handle propietario action from email link
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const action = params.get('action')
     const id     = params.get('id')
-    if (action && id && !user) {
+    if (action && id) {
       // Auto-login as propietario for email link flow
       const propUser = { username: 'merced', ...USERS['merced'] }
       handleLogin(propUser)
