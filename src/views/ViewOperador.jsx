@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { supabase, getSolicitudes, upsertSolicitud, fromDb, getAlertas } from '../lib/supabase.js'
+import { supabase, getSolicitudes, upsertSolicitud, fromDb, getAlertas, getTrabajadores, getEmpresas, upsertEmpresa } from '../lib/supabase.js'
 import { SITIOS, COLOCALIZACIONES, EMPRESAS_DEFAULT, TIPOS_TRABAJO, VENTANA_MAX, TRABAJO_INFORMAL, ZONAS, ESTADO_COLOR, C, OP_COLOR, OP_SHORT, validarSolicitud, daysBetween, nextId, formatRUT, todayISO } from '../shared/data.js'
 import { ATPLogo, Badge, AutoPill, FlowTracker, SolicitudCard, DetalleModal, Notif, GlobalStyle } from '../shared/components.jsx'
 import { enviarCorreoPropietario } from '../lib/email.js'
@@ -31,8 +31,10 @@ export default function ViewOperador({ user, onLogout }) {
   }
 
   async function cargarAlertas() {
-    const { data } = await import('../lib/supabase.js').then(m => m.supabase.from('alertas').select('*').eq('estado','activo'))
-    if (data) setAlertas(data)
+    try {
+      const alts = await getAlertas()
+      setAlertas(alts.filter(a => a.estado === 'activo'))
+    } catch(e) { console.error('alertas error', e) }
   }
 
   useEffect(() => {
