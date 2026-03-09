@@ -21,8 +21,14 @@ export async function upsertSolicitud(sol) {
 export async function updateEstado(id, estado, extra = {}) {
   const patch = { estado, ...extra }
   if (estado === 'Autorizado') patch.ts_autorizado = new Date().toISOString()
-  const { error } = await supabase.from('solicitudes').update(patch).eq('id', id)
-  if (error) console.error(error)
+  console.log('🔄 updateEstado llamado:', id, estado, patch)
+  const { data, error } = await supabase.from('solicitudes').update(patch).eq('id', id).select()
+  if (error) {
+    console.error('❌ updateEstado ERROR:', error)
+    return false
+  }
+  console.log('✅ updateEstado OK, DB devolvió:', data?.[0]?.estado)
+  return true
 }
 
 // ── ALERTAS ───────────────────────────────────────────────────

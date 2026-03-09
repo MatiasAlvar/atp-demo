@@ -42,12 +42,7 @@ export default function ViewATP({ user, onLogout }) {
 
   useEffect(() => {
     cargar()
-    const ch1 = supabase.channel('atp-s').on('postgres_changes',{event:'*',schema:'public',table:'solicitudes'},(payload)=>{
-      if (payload.eventType==='UPDATE' && payload.new) {
-        const updated = fromDb(payload.new)
-        setSolicitudes(prev => prev.map(s => s.id===updated.id ? updated : s))
-      } else { cargar() }
-    }).subscribe()
+    const ch1 = supabase.channel('atp-s').on('postgres_changes',{event:'*',schema:'public',table:'solicitudes'},cargar).subscribe()
     const ch2 = supabase.channel('atp-a').on('postgres_changes',{event:'*',schema:'public',table:'alertas'},cargar).subscribe()
     return () => { supabase.removeChannel(ch1); supabase.removeChannel(ch2) }
   },[])
@@ -56,8 +51,15 @@ export default function ViewATP({ user, onLogout }) {
     const sol = solicitudes.find(s=>s.id===id)
     if(!sol) return
     const hist = [...(sol.historial||[]),{estado:'Autorizado',fecha:new Date().toLocaleString('es-CL'),auto:false}]
-    await updateEstado(id,'Autorizado',{historial:hist, tsAutorizado:new Date().toISOString()})
-    await cargar()
+    const tsAut = new Date().toISOString()
+    // 1) Optimistic: mostrar cambio de inmediato
+    setSolicitudes(prev => prev.map(s => s.id===id ? {...s,estado:'Autorizado',historial:hist,tsAutorizado:tsAut} : s))
+    // 2) Guardar en DB
+    const ok = await updateEstado(id,'Autorizado',{historial:hist, tsAutorizado:tsAut})
+    console.log('handleAutorizar - updateEstado result:', ok)
+    // 3) Verificar desde DB
+    const { data: dbRow, error: dbErr } = await supabase.from('solicitudes').select('estado').eq('id',id).single()
+    console.log('handleAutorizar - DB estado actual:', dbRow?.estado, dbErr)
     showNotif('✅ Acceso autorizado')
   }
 
