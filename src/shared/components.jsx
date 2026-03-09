@@ -71,3 +71,94 @@ export const GlobalStyle = () => (
     ::-webkit-scrollbar-thumb{background:#ccc;border-radius:3px}
   `}</style>
 )
+
+export const SolicitudCard = ({s, onDetalle, showAll=true}) => {
+  const sitio = SITIOS.find(x=>x.id===s.sitio)
+  return (
+    <div onClick={onDetalle?()=>onDetalle(s):undefined}
+      style={{padding:'12px 18px',borderBottom:`1px solid ${C.gray2}`,background:'#fff',cursor:onDetalle?'pointer':'default'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:6}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+          <span style={{fontWeight:700,fontSize:13,color:C.red}}>{s.id}</span>
+          {s.refCliente&&<span style={{fontSize:11,background:'#E8EAF6',color:'#3949AB',borderRadius:3,padding:'1px 7px',fontFamily:'monospace'}}>{s.refCliente}</span>}
+          <AutoPill auto={s.auto}/>
+        </div>
+        <Badge estado={s.estado}/>
+      </div>
+      {showAll&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:4,marginBottom:6,fontSize:12}}>
+        <span><span style={{color:C.textS}}>Operador: </span>{s.operador}</span>
+        <span><span style={{color:C.textS}}>Contratista: </span>{s.empresaNombre||s.empresa||'—'}</span>
+        <span><span style={{color:C.textS}}>Trabajo: </span>{s.trabajo}</span>
+        <span><span style={{color:C.textS}}>Sitio: </span>{s.sitio}</span>
+      </div>}
+      {(s.desde||s.hasta)&&<div style={{display:'flex',gap:8,alignItems:'center',marginBottom:4}}>
+        <span style={{background:C.blueL,color:C.blue,borderRadius:4,padding:'2px 8px',fontSize:11,fontWeight:600}}>📅 {s.desde||'—'} → {s.hasta||'—'}</span>
+        {s.desde&&s.hasta&&<span style={{fontSize:11,color:C.textS}}>{Math.ceil((new Date(s.hasta)-new Date(s.desde))/86400000)+1} días</span>}
+        {sitio&&<span style={{fontSize:11,color:C.textS}}>· {sitio.nombre}</span>}
+      </div>}
+      <FlowTracker estado={s.estado}/>
+      {s.motivo&&<div style={{fontSize:11,color:C.red,marginTop:3}}>⚠️ {s.motivo}</div>}
+    </div>
+  )
+}
+
+export const DetalleModal = ({sol, onClose}) => {
+  if (!sol) return null
+  const sitio = SITIOS.find(s=>s.id===sol.sitio)
+  const durMs = sol.tsEnviado&&sol.tsAutorizado ? new Date(sol.tsAutorizado)-new Date(sol.tsEnviado) : null
+  return (
+    <div style={{position:'fixed',inset:0,background:'#00000066',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
+      <div style={{background:'#fff',borderRadius:10,width:'100%',maxWidth:560,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 16px 48px #0003'}}>
+        <div style={{background:C.red,borderRadius:'10px 10px 0 0',padding:'16px 20px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div>
+            <div style={{fontWeight:800,fontSize:16,color:'#fff'}}>{sol.id}</div>
+            {sol.refCliente&&<div style={{fontSize:11,color:'rgba(255,255,255,0.8)',marginTop:2}}>{sol.refCliente}</div>}
+          </div>
+          <button onClick={onClose} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',borderRadius:4,padding:'4px 10px',cursor:'pointer',fontSize:16}}>×</button>
+        </div>
+        <div style={{padding:20}}>
+          <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+            <Badge estado={sol.estado}/>
+            {sol.auto&&<span style={{background:C.amberL,color:C.amber,borderRadius:10,padding:'2px 8px',fontSize:11,fontWeight:700}}>⚡ Auto</span>}
+            {durMs&&<span style={{background:C.greenL,color:C.green,borderRadius:10,padding:'2px 8px',fontSize:11,fontWeight:700}}>⏱️ {formatDuration(durMs)}</span>}
+          </div>
+          <FlowTracker estado={sol.estado}/>
+          {sol.motivo&&<div style={{background:C.redL,borderRadius:4,padding:'8px 12px',fontSize:12,color:C.red,marginTop:10}}>⚠️ {sol.motivo}</div>}
+          <div style={{height:1,background:C.border,margin:'14px 0'}}/>
+          {[['Operador',sol.operador],['Empresa',sol.empresaNombre||sol.empresa||'—'],['Sitio',`${sol.sitio}${sitio?' — '+sitio.nombre:''}`],['Trabajo',sol.trabajo],['Zona',sol.zona||'—'],['Fechas',`${sol.desde||'—'} → ${sol.hasta||'—'}`],['Correo mandante',sol.correoMandante||'—'],['Correo contratista',sol.correoContratista||'—']].map(([l,v])=>(
+            <div key={l} style={{display:'flex',gap:10,paddingBottom:8,borderBottom:`1px solid ${C.gray2}`,marginBottom:8,fontSize:13}}>
+              <div style={{width:150,color:C.textS,flexShrink:0}}>{l}</div>
+              <div style={{fontWeight:500}}>{v}</div>
+            </div>
+          ))}
+          {sol.trabajadores?.length>0&&(
+            <div style={{marginTop:12}}>
+              <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>👷 Personal ({sol.trabajadores.length})</div>
+              {sol.trabajadores.map((t,i)=>(
+                <div key={i} style={{background:C.gray1,borderRadius:4,padding:'6px 10px',marginBottom:4,fontSize:12,display:'flex',justifyContent:'space-between'}}>
+                  <span style={{fontWeight:500}}>{t.nombre||'—'}</span>
+                  <span style={{fontFamily:'monospace',color:C.textS}}>{t.rut||'—'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {sol.historial?.length>0&&(
+            <div style={{marginTop:14}}>
+              <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>📋 Historial</div>
+              {sol.historial.map((h,i)=>(
+                <div key={i} style={{display:'flex',gap:10,paddingBottom:8,alignItems:'center'}}>
+                  <div style={{width:20,height:20,borderRadius:'50%',background:ESTADO_COLOR[h.estado]?.bg||C.gray4,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'#fff',fontWeight:700,flexShrink:0}}>{i+1}</div>
+                  <div style={{flex:1}}><Badge estado={h.estado} small/>{h.auto&&<span style={{marginLeft:4,fontSize:10,color:C.amber}}>⚡</span>}</div>
+                  <div style={{fontSize:11,color:C.textS}}>{h.fecha}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div style={{padding:'12px 20px',borderTop:`1px solid ${C.border}`,textAlign:'right'}}>
+          <button onClick={onClose} style={{background:C.red,color:'#fff',border:'none',borderRadius:4,padding:'8px 20px',fontWeight:700,cursor:'pointer'}}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
