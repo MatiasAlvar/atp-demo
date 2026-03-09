@@ -55,7 +55,7 @@ export default function ViewATP({ user, onLogout }) {
     // 1) Optimistic: mostrar cambio de inmediato
     setSolicitudes(prev => prev.map(s => s.id===id ? {...s,estado:'Autorizado',historial:hist,tsAutorizado:tsAut} : s))
     // 2) Guardar en DB
-    const ok = await updateEstado(id,'Autorizado',{historial:hist, tsAutorizado:tsAut})
+    const ok = await updateEstado(id,'Autorizado',{historial:hist})
     console.log('handleAutorizar - updateEstado result:', ok)
     // 3) Verificar desde DB
     const { data: dbRow, error: dbErr } = await supabase.from('solicitudes').select('estado').eq('id',id).single()

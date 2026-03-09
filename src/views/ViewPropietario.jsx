@@ -62,20 +62,23 @@ export default function ViewPropietario({ user, onLogout }) {
   async function handleDecision(solId, decision) {
     const nuevoEstado = decision === 'autorizar' ? 'Autorizado' : 'Rechazado'
     const sol = solicitudes.find(s => s.id === solId)
-    if (!sol) {
-      // Recargar y reintentar — puede ser que solicitudes aún no cargaron
-      await cargar()
-      return
-    }
+    if (!sol) { await cargar(); return }
     const tsAut = new Date().toISOString()
     const nuevoHistorial = [...(sol.historial || []), {
       estado: nuevoEstado,
       fecha: new Date().toLocaleString('es-CL'),
       auto: false,
     }]
-    await updateEstado(solId, nuevoEstado, { historial: nuevoHistorial, tsAutorizado: nuevoEstado==='Autorizado'?tsAut:undefined })
-    await cargar()
+    // 1) Optimistic update inmediato
+    setSolicitudes(prev => prev.map(s => s.id===solId ? {...s, estado:nuevoEstado, historial:nuevoHistorial} : s))
+    // 2) Guardar en DB
+    await updateEstado(solId, nuevoEstado, { historial: nuevoHistorial })
     setAccion({ id: solId, tipo: decision, done: true })
+    // 3) Confirmar desde DB a los 2s para sincronizar
+    setTimeout(async () => {
+      const { data } = await supabase.from('solicitudes').select('*').eq('id',solId).single()
+      if (data) setSolicitudes(prev => prev.map(s => s.id===solId ? fromDb(data) : s))
+    }, 2000)
   }
 
   const pendientes  = solicitudes.filter(s => s.estado === 'En Gestión Propietario')
