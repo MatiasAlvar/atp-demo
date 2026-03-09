@@ -452,6 +452,16 @@ function TabMapa({solicitudes}){
   )
 }
 
+// Local fallback in case of tree-shaking issues
+function fmtDur(ms) {
+  if (!ms || ms <= 0) return '—'
+  const m = Math.round(ms/60000)
+  if (m < 60) return m + ' min'
+  const h = Math.floor(m/60), rm = m%60
+  if (h < 24) return rm > 0 ? h+'h '+rm+'m' : h+'h'
+  return Math.floor(h/24)+'d'
+}
+
 function TabDashboard({solicitudes}){
   const total = solicitudes.length || 1
   const aut   = solicitudes.filter(s=>s.estado==='Autorizado').length
@@ -486,7 +496,7 @@ function TabDashboard({solicitudes}){
         <KpiCard icon="⏳" value={pend} label="En gestión" color={C.orange}/>
         <KpiCard icon="❌" value={rech} label="Rechazadas" color={C.red}/>
         <KpiCard icon="⚡" value={`${Math.round(solicitudes.filter(s=>s.auto).length/total*100)}%`} label="Automatizadas" color={C.purple}/>
-        <KpiCard icon="⏱️" value={formatDuration(promMs)} label="Tiempo prom." color={C.teal} sub="envío → autorizado"/>
+        <KpiCard icon="⏱️" value={fmtDur(promMs)} label="Tiempo prom." color={C.teal} sub="envío → autorizado"/>
         <KpiCard icon="🏗️" value={SITIOS.length} label="Sitios" color={C.blue}/>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
