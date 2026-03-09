@@ -2,9 +2,20 @@ import { useState, useEffect, useMemo } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase, getSolicitudes, updateEstado, getAlertas, upsertAlerta, resolverAlerta, getTrabajadores, upsertTrabajador, deleteTrabajador, getEmpresas, upsertEmpresa, fromDb } from '../lib/supabase.js'
 import { enviarCorreoPropietario } from '../lib/email.js'
-import { SITIOS, COLOCALIZACIONES, TIPOS_TRABAJO, VENTANA_MAX, TRABAJO_INFORMAL, ESTADOS, ESTADO_COLOR, C, OP_COLOR, OP_SHORT, OPERADORES, daysBetween, formatDuration, formatRUT, todayISO } from '../shared/data.js'
+import { SITIOS, COLOCALIZACIONES, TIPOS_TRABAJO, VENTANA_MAX, TRABAJO_INFORMAL, ESTADOS, ESTADO_COLOR, C, OP_COLOR, OP_SHORT, OPERADORES, daysBetween, formatRUT, todayISO } from '../shared/data.js'
 import { ATPLogo, Badge, AutoPill, FlowTracker, KpiCard, Notif, GlobalStyle } from '../shared/components.jsx'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid, Legend } from 'recharts'
+
+// Helper inline para evitar problemas de bundling
+const fmtDur = (ms) => {
+  if (!ms || ms <= 0) return '—'
+  const m = Math.round(ms / 60000)
+  if (m < 60) return m + ' min'
+  const h = Math.floor(m / 60), rm = m % 60
+  if (h < 24) return rm > 0 ? h + 'h ' + rm + 'm' : h + 'h'
+  return Math.floor(h / 24) + 'd'
+}
+
 
 export default function ViewATP({ user, onLogout }) {
   const [view, setView]            = useState('lista')
@@ -135,7 +146,7 @@ function DetalleModal({sol,onClose}){
           <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
             <Badge estado={sol.estado}/>
             {sol.auto&&<span style={{background:C.amberL,color:C.amber,borderRadius:10,padding:'2px 8px',fontSize:11,fontWeight:700}}>⚡ Auto</span>}
-            {durMs&&<span style={{background:C.greenL,color:C.green,borderRadius:10,padding:'2px 8px',fontSize:11,fontWeight:700}}>⏱️ {formatDuration(durMs)}</span>}
+            {durMs&&<span style={{background:C.greenL,color:C.green,borderRadius:10,padding:'2px 8px',fontSize:11,fontWeight:700}}>⏱️ {fmtDur(durMs)}</span>}
           </div>
           <FlowTracker estado={sol.estado}/>
           {sol.motivo&&<div style={{background:C.redL,borderRadius:4,padding:'8px 12px',fontSize:12,color:C.red,marginTop:10}}>⚠️ {sol.motivo}</div>}
@@ -177,7 +188,7 @@ function TabLista({solicitudes,filterEst,setFilterEst,filterOp,setFilterOp,onDet
                   <span style={{fontSize:12,color:OP_COLOR[s.operador],fontWeight:600}}>{OP_SHORT[s.operador]||s.operador}</span>
                 </div>
                 <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                  {s.tsEnviado&&s.tsAutorizado&&<span style={{fontSize:10,color:C.green}}>⏱️ {formatDuration(new Date(s.tsAutorizado)-new Date(s.tsEnviado))}</span>}
+                  {s.tsEnviado&&s.tsAutorizado&&<span style={{fontSize:10,color:C.green}}>⏱️ {fmtDur(new Date(s.tsAutorizado)-new Date(s.tsEnviado))}</span>}
                   <Badge estado={s.estado}/>
                 </div>
               </div>
@@ -450,16 +461,6 @@ function TabMapa({solicitudes}){
       </div>
     </div>
   )
-}
-
-// Local fallback in case of tree-shaking issues
-function fmtDur(ms) {
-  if (!ms || ms <= 0) return '—'
-  const m = Math.round(ms/60000)
-  if (m < 60) return m + ' min'
-  const h = Math.floor(m/60), rm = m%60
-  if (h < 24) return rm > 0 ? h+'h '+rm+'m' : h+'h'
-  return Math.floor(h/24)+'d'
 }
 
 function TabDashboard({solicitudes}){

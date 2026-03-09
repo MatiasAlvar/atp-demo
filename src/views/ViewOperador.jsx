@@ -1,8 +1,19 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase, getSolicitudes, upsertSolicitud, fromDb, getAlertas, getTrabajadores, getEmpresas, upsertEmpresa } from '../lib/supabase.js'
-import { SITIOS, COLOCALIZACIONES, EMPRESAS_DEFAULT, TIPOS_TRABAJO, VENTANA_MAX, TRABAJO_INFORMAL, ZONAS, ESTADO_COLOR, C, OP_COLOR, OP_SHORT, validarSolicitud, daysBetween, nextId, formatRUT, formatDuration, todayISO } from '../shared/data.js'
+import { SITIOS, COLOCALIZACIONES, EMPRESAS_DEFAULT, TIPOS_TRABAJO, VENTANA_MAX, TRABAJO_INFORMAL, ZONAS, ESTADO_COLOR, C, OP_COLOR, OP_SHORT, validarSolicitud, daysBetween, nextId, formatRUT, todayISO } from '../shared/data.js'
 import { ATPLogo, Badge, AutoPill, FlowTracker, SolicitudCard, DetalleModal, Notif, GlobalStyle } from '../shared/components.jsx'
 import { enviarCorreoPropietario } from '../lib/email.js'
+
+// Helper inline para evitar problemas de bundling
+const fmtDur = (ms) => {
+  if (!ms || ms <= 0) return '—'
+  const m = Math.round(ms / 60000)
+  if (m < 60) return m + ' min'
+  const h = Math.floor(m / 60), rm = m % 60
+  if (h < 24) return rm > 0 ? h + 'h ' + rm + 'm' : h + 'h'
+  return Math.floor(h / 24) + 'd'
+}
+
 
 const APIKEY_KEY = 'atp_apikey'
 
@@ -178,7 +189,7 @@ function SolRow({ s, onClick }) {
       </div>
       <div style={{display:'flex',gap:10,alignItems:'center'}}>
         <span style={{background:C.blueL,color:C.blue,borderRadius:4,padding:'2px 8px',fontSize:11,fontWeight:600}}>📅 {s.desde||'—'} → {s.hasta||'—'}</span>
-        {durMs&&<span style={{fontSize:11,color:C.green}}>⏱️ {formatDuration(durMs)}</span>}
+        {durMs&&<span style={{fontSize:11,color:C.green}}>⏱️ {fmtDur(durMs)}</span>}
         <span style={{fontSize:11,color:C.textS,marginLeft:'auto'}}>👁 Ver detalle</span>
       </div>
     </div>
