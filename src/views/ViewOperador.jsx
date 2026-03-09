@@ -510,13 +510,45 @@ function TabIA({ apiKey, onPreFill, showNotif }) {
     const si = setInterval(() => setParseStep(s => Math.min(s+1, steps.length-1)), 900)
     try {
       const base64 = await new Promise((res,rej) => { const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(file) })
-      const sitiosInfo = SITIOS.map(s=>`${s.id}/${s.siterra}: ${s.nombre}`).join(', ')
-      const prompt = `Extrae datos de este formulario/OT/Excel para solicitud ATP Chile. Responde SOLO JSON válido sin texto adicional:\n{"rut_empresa":"XX.XXX.XXX-X","empresa_contratista":"nombre","rut_tecnico_responsable":"XX.XXX.XXX-X","nombre_tecnico_responsable":"Nombre","fecha_desde":"YYYY-MM-DD","fecha_hasta":"YYYY-MM-DD","tipo_trabajo":"","zona":"","sitio_id":"","personal":[{"nombre":"","rut":"XX.XXX.XXX-X"}],"confianza":"alta|media|baja","notas":""}\nSitios disponibles: ${sitiosInfo}\nTipos trabajo: ${TIPOS_TRABAJO.join(', ')}`
+      const sitiosInfo = SITIOS.map(s=>`${s.id}: ${s.nombre} (${s.regionLabel})`).join('\n')
+      const prompt = `Eres un experto extractor de datos para el sistema ATP Chile de acceso a torres de telecomunicaciones.
+Del archivo adjunto extrae TODOS los campos posibles. IMPORTANTE: extrae TODOS los técnicos/trabajadores que encuentres, no solo el primero.
+
+Responde ÚNICAMENTE con JSON válido, sin texto adicional, sin markdown, sin explicaciones:
+{
+  "rut_empresa": "XX.XXX.XXX-X",
+  "empresa_contratista": "Nombre completo de la empresa",
+  "fecha_desde": "YYYY-MM-DD",
+  "fecha_hasta": "YYYY-MM-DD",
+  "tipo_trabajo": "uno de: ${TIPOS_TRABAJO.join(' | ')}",
+  "zona": "una de: Sala de equipos | Torre / Estructura | Área exterior | Cuarto técnico | Sala de baterías",
+  "sitio_id": "ID del sitio ATP más cercano de la lista",
+  "personal": [
+    {"nombre": "Nombre Completo", "rut": "XX.XXX.XXX-X"},
+    {"nombre": "Nombre Completo 2", "rut": "XX.XXX.XXX-X"}
+  ],
+  "confianza": "alta | media | baja",
+  "notas": "cualquier dato relevante no capturado"
+}
+
+Reglas críticas:
+- Extrae TODOS los técnicos/trabajadores que encuentres en el archivo (puede haber 5, 10, 25 o más)
+- Formatea TODOS los RUTs como XX.XXX.XXX-X (con puntos y guión). Si tiene 7 dígitos en el cuerpo, agrega 0 al inicio.
+- Para sitio_id busca coincidencias por nombre, código o ciudad en esta lista:\n${sitiosInfo}
+- Para fecha_desde y fecha_hasta usa formato YYYY-MM-DD
+- Si no encuentras un campo, déjalo vacío ("")`
+
       let messages
-      const mt = file.type || `application/${fileType}`
-      if (['pdf'].includes(fileType)) messages=[{role:'user',content:[{type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},{type:'text',text:prompt}]}]
-      else if (['png','jpg','jpeg','webp'].includes(fileType)) messages=[{role:'user',content:[{type:'image',source:{type:'base64',media_type:mt,data:base64}},{type:'text',text:prompt}]}]
-      else messages=[{role:'user',content:`${prompt}\n\nContenido del archivo (${file.name}): simula extracción razonable basada en el nombre del archivo.`}]
+      const mt = file.type || 'application/octet-stream'
+      if (['pdf'].includes(fileType)) {
+        messages=[{role:'user',content:[{type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},{type:'text',text:prompt}]}]
+      } else if (['png','jpg','jpeg','webp'].includes(fileType)) {
+        messages=[{role:'user',content:[{type:'image',source:{type:'base64',media_type:mt.startsWith('image/')?mt:'image/jpeg',data:base64}},{type:'text',text:prompt}]}]
+      } else {
+        // Para Excel/CSV: leer como texto
+        const text = await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsText(file,'utf-8')})
+        messages=[{role:'user',content:`${prompt}\n\nContenido del archivo (${file.name}, ${fileType.toUpperCase()}):\n${text.slice(0,12000)}`}]
+      }
       const res = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1500,messages})})
       const data = await res.json()
       if (data.error) throw new Error(data.error.message)

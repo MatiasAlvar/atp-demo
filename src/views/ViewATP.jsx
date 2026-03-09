@@ -40,8 +40,12 @@ export default function ViewATP({ user, onLogout }) {
     const sol = solicitudes.find(s=>s.id===id)
     if(!sol) return
     const hist = [...(sol.historial||[]),{estado:'Autorizado',fecha:new Date().toLocaleString('es-CL'),auto:false}]
-    await updateEstado(id,'Autorizado',{historial:hist})
-    showNotif('✅ Acceso autorizado')
+    await updateEstado(id,'Autorizado',{historial:hist, tsAutorizado:new Date().toISOString()})
+    try {
+      const { enviarCorreoAutorizacion } = await import('../lib/email.js')
+      await enviarCorreoAutorizacion({ solicitud:{...sol,estado:'Autorizado'} })
+    } catch(e){ console.error('email error',e) }
+    showNotif('✅ Acceso autorizado — correo enviado a mandante y contratista')
     await cargar()
   }
 
@@ -272,134 +276,182 @@ function TabAlertas({alertas,setAlertas,showNotif}){
 }
 
 // ── MAPA CHILE ────────────────────────────────────────────────
+// Proyección: x = (lng+75)*20, y = (-lat-17)*18
+const CHILE_REGIONES = [
+  { id:'XV', nombre:'Arica y Parinacota', color:'#FF8A65',
+    path:'M 94,6 L 124,6 L 128,14 L 126,44 L 98,44 L 94,34 Z' },
+  { id:'I',  nombre:'Tarapacá',           color:'#FFB74D',
+    path:'M 94,44 L 126,44 L 128,100 L 96,100 L 94,44 Z' },
+  { id:'II', nombre:'Antofagasta',         color:'#FFF176',
+    path:'M 92,100 L 128,100 L 134,200 L 90,200 Z' },
+  { id:'III',nombre:'Atacama',             color:'#AED581',
+    path:'M 86,200 L 134,200 L 138,256 L 84,256 Z' },
+  { id:'IV', nombre:'Coquimbo',            color:'#4DD0E1',
+    path:'M 80,256 L 138,256 L 136,306 L 78,306 Z' },
+  { id:'V',  nombre:'Valparaíso',          color:'#4FC3F7',
+    path:'M 68,306 L 136,306 L 132,332 L 66,332 Z' },
+  { id:'XIII',nombre:'Metropolitana',      color:'#BA68C8',
+    path:'M 66,332 L 132,332 L 128,360 L 64,360 Z' },
+  { id:'VI', nombre:"O'Higgins",           color:'#F48FB1',
+    path:'M 62,360 L 128,360 L 124,388 L 60,388 Z' },
+  { id:'VII',nombre:'Maule',               color:'#80CBC4',
+    path:'M 56,388 L 124,388 L 118,428 L 52,428 Z' },
+  { id:'XVI',nombre:'Ñuble',               color:'#FFCC02',
+    path:'M 50,428 L 118,428 L 112,452 L 46,452 Z' },
+  { id:'VIII',nombre:'Biobío',             color:'#81C784',
+    path:'M 42,452 L 112,452 L 106,488 L 38,488 Z' },
+  { id:'IX', nombre:'Araucanía',           color:'#FF8A65',
+    path:'M 36,488 L 106,488 L 98,522 L 32,522 Z' },
+  { id:'XIV',nombre:'Los Ríos',            color:'#4FC3F7',
+    path:'M 30,522 L 98,522 L 90,546 L 26,546 Z' },
+  { id:'X',  nombre:'Los Lagos',           color:'#AED581',
+    path:'M 22,546 L 90,546 L 86,604 L 16,604 Z' },
+  { id:'XI', nombre:'Aysén',               color:'#80CBC4',
+    path:'M 10,604 L 86,604 L 100,662 L 8,662 Z' },
+  { id:'XII',nombre:'Magallanes',          color:'#CE93D8',
+    path:'M 6,662 L 100,662 L 138,698 L 12,698 L 2,680 Z' },
+]
+
 function TabMapa({solicitudes}){
-  const [hover,setHover]=useState(null)
-  const stats=solicitudes.reduce((acc,s)=>{if(!acc[s.sitio])acc[s.sitio]={total:0,aut:0,pend:0};acc[s.sitio].total++;if(s.estado==='Autorizado')acc[s.sitio].aut++;if(['En Gestión Propietario','Validado'].includes(s.estado))acc[s.sitio].pend++;return acc},{})
+  const [hover,setHover] = useState(null)
 
-  // Regions: [id, name, points polygon, color]
-  const regions = [
-    {id:'XV', name:'Arica y Parinacota', code:'XV', points:'68,0 100,0 103,32 65,32'},
-    {id:'I',  name:'Tarapacá',           code:'I',  points:'65,32 103,32 105,72 62,72'},
-    {id:'II', name:'Antofagasta',        code:'II', points:'62,72 105,72 109,180 57,180'},
-    {id:'III',name:'Atacama',            code:'III',points:'57,180 109,180 108,228 52,228'},
-    {id:'IV', name:'Coquimbo',           code:'IV', points:'52,228 108,228 106,272 46,272'},
-    {id:'V',  name:'Valparaíso',         code:'V',  points:'46,272 106,272 104,302 40,302'},
-    {id:'RM', name:'Metropolitana',      code:'RM', points:'47,296 102,296 100,322 45,322'},
-    {id:'VI', name:"O'Higgins",          code:'VI', points:'44,318 100,318 98,346 41,346'},
-    {id:'VII',name:'Maule',              code:'VII',points:'41,342 98,342 96,374 36,374'},
-    {id:'XVI',name:'Ñuble',              code:'XVI',points:'36,370 96,370 94,393 30,393'},
-    {id:'VIII',name:'Biobío',            code:'VIII',points:'30,389 94,389 92,418 24,418'},
-    {id:'IX', name:'Araucanía',          code:'IX', points:'24,414 92,414 90,446 18,446'},
-    {id:'XIV',name:'Los Ríos',           code:'XIV',points:'18,442 90,442 88,468 13,468'},
-    {id:'X',  name:'Los Lagos',          code:'X',  points:'13,464 88,464 84,518 10,518'},
-    {id:'XI', name:'Aysén',              code:'XI', points:'16,514 80,514 76,572 20,572'},
-    {id:'XII',name:'Magallanes',         code:'XII',points:'22,568 74,568 70,624 26,624'},
-  ]
+  // Cuenta solicitudes por sitio
+  const statsBySitio = solicitudes.reduce((acc,s)=>{
+    if(!acc[s.sitio]) acc[s.sitio]={total:0,aut:0,pend:0}
+    acc[s.sitio].total++
+    if(s.estado==='Autorizado') acc[s.sitio].aut++
+    if(['En Gestión Propietario','Validado','En Validación','Enviado'].includes(s.estado)) acc[s.sitio].pend++
+    return acc
+  },{})
 
-  // Assign sites to regions by regionCode
-  const regionSites = SITIOS.reduce((acc,s)=>{if(!acc[s.regionCode])acc[s.regionCode]=[];acc[s.regionCode].push(s);return acc},{})
-
-  // Map lat/lng to SVG coords in 170x630 viewbox
-  function toXY(lat,lng){
-    const x = Math.round(((lng-(-75))/10)*140 + 15)
-    const y = Math.round(((lat-(-17))/39)*610 + 10)
-    return {x, y}
+  // Convierte lat/lng a SVG x,y
+  function toSVG(lat,lng){
+    return { x: Math.round((lng+75)*20), y: Math.round((-lat-17)*18) }
   }
 
-  function regionColor(regionId){
-    const sites = regionSites[regionId] || []
-    if(sites.length===0) return '#D6EAF8'
-    const hasAut  = sites.some(s=>stats[s.id]?.aut>0)
-    const hasPend = sites.some(s=>stats[s.id]?.pend>0)
-    const hasAny  = sites.some(s=>stats[s.id]?.total>0)
-    if(hasAut) return '#C8E6C9'
-    if(hasPend) return '#FFE0B2'
-    if(hasAny) return '#BBDEFB'
-    return '#E8EAF6'
+  // Color del punto en mapa según actividad
+  function puntColor(sitioId){
+    const s = statsBySitio[sitioId]||{}
+    if(s.aut>0)  return '#2E7D32'
+    if(s.pend>0) return '#E65100'
+    return '#1565C0'
   }
+
+  const hSitio = hover ? SITIOS.find(s=>s.id===hover) : null
+  const hStats = hover ? (statsBySitio[hover]||{total:0,aut:0,pend:0}) : null
+
+  // Cuántos sitios hay por región
+  const sitiosPorRegion = SITIOS.reduce((acc,s)=>{
+    acc[s.regionLabel]=(acc[s.regionLabel]||0)+1; return acc
+  },{})
 
   return(
     <div style={{animation:'fadeIn 0.3s ease'}}>
-      <h2 style={{margin:'0 0 4px',fontSize:18,fontWeight:700}}>Mapa de Chile — Sitios ATP</h2>
-      <p style={{color:C.textS,fontSize:13,margin:'0 0 16px'}}>Distribución geográfica de los {SITIOS.length} sitios por región.</p>
-      <div style={{display:'flex',gap:16}}>
-        {/* Leyenda + lista */}
-        <div style={{width:220,flexShrink:0}}>
-          <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:14,marginBottom:12}}>
-            <div style={{fontWeight:600,fontSize:12,marginBottom:8}}>Leyenda</div>
-            {[['#C8E6C9','Con accesos autorizados'],['#FFE0B2','Con solicitudes activas'],['#BBDEFB','Con actividad'],['#E8EAF6','Sin actividad'],['#D6EAF8','Sin sitios ATP']].map(([c,l])=>(
-              <div key={l} style={{display:'flex',gap:7,alignItems:'center',marginBottom:5,fontSize:11}}><div style={{width:16,height:12,background:c,border:'1px solid #ccc',borderRadius:2,flexShrink:0}}/><span style={{color:C.textS}}>{l}</span></div>
+      <h2 style={{margin:'0 0 4px',fontSize:18,fontWeight:700}}>Mapa de Sitios — Chile</h2>
+      <p style={{color:C.textS,fontSize:13,margin:'0 0 16px'}}>Hover sobre un sitio para ver detalle. Verde = autorizado · Naranja = pendiente · Azul = sin actividad.</p>
+      <div style={{display:'flex',gap:16,alignItems:'flex-start'}}>
+
+        {/* Leyenda izquierda */}
+        <div style={{width:200,flexShrink:0,display:'flex',flexDirection:'column',gap:10}}>
+          <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:12}}>
+            <div style={{fontWeight:600,fontSize:12,marginBottom:8}}>Sitios</div>
+            {[['#2E7D32','Con accesos autorizados'],['#E65100','Pendientes de aprobar'],['#1565C0','Sin actividad reciente']].map(([c,l])=>(
+              <div key={l} style={{display:'flex',gap:6,alignItems:'center',marginBottom:5}}>
+                <div style={{width:10,height:10,borderRadius:'50%',background:c,flexShrink:0,border:'1.5px solid white',boxShadow:'0 0 0 1px '+c}}/>
+                <span style={{fontSize:11,color:C.textS}}>{l}</span>
+              </div>
             ))}
           </div>
-          <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:14}}>
-            <div style={{fontWeight:600,fontSize:12,marginBottom:8}}>Sitios activos</div>
-            {SITIOS.map(s=>{const st=stats[s.id]||{};return(
-              <div key={s.id} style={{display:'flex',justifyContent:'space-between',marginBottom:4,fontSize:11,alignItems:'center'}}>
-                <div style={{display:'flex',gap:4,alignItems:'center'}}>
-                  <div style={{width:6,height:6,borderRadius:'50%',background:st.aut>0?C.green:st.pend>0?C.orange:C.gray3,flexShrink:0}}/>
-                  <span style={{color:C.textS,fontSize:10}}>{s.id}</span>
-                </div>
-                <span style={{fontWeight:600,color:st.total?C.blue:C.gray4}}>{st.total||0}</span>
+
+          {hSitio&&(
+            <div style={{background:C.white,border:`2px solid ${C.blue}`,borderRadius:6,padding:12,animation:'fadeIn 0.2s ease'}}>
+              <div style={{fontWeight:700,fontSize:12,color:C.red,marginBottom:4}}>{hSitio.id}</div>
+              <div style={{fontWeight:600,fontSize:12,marginBottom:3}}>{hSitio.nombre}</div>
+              <div style={{fontSize:11,color:C.textS,marginBottom:2}}>{hSitio.tipo} · {hSitio.altTotal}m</div>
+              <div style={{fontSize:11,color:C.textS,marginBottom:8}}>{hSitio.regionLabel}</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:4}}>
+                {[['Total',hStats.total,C.blue],['Aut.',hStats.aut,C.green],['Pend.',hStats.pend,C.orange]].map(([l,v,col])=>(
+                  <div key={l} style={{textAlign:'center',background:C.gray1,borderRadius:3,padding:'4px 2px'}}>
+                    <div style={{fontWeight:800,fontSize:18,color:col}}>{v}</div>
+                    <div style={{fontSize:9,color:C.textS}}>{l}</div>
+                  </div>
+                ))}
               </div>
-            )})}
+            </div>
+          )}
+
+          <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:12}}>
+            <div style={{fontWeight:600,fontSize:12,marginBottom:8}}>Resumen</div>
+            {[['Sitios totales',SITIOS.length,C.blue],['Con actividad',Object.keys(statsBySitio).length,C.purple],['Autorizados',solicitudes.filter(s=>s.estado==='Autorizado').length,C.green],['Pendientes',solicitudes.filter(s=>['En Gestión Propietario','Validado'].includes(s.estado)).length,C.orange]].map(([l,v,col])=>(
+              <div key={l} style={{display:'flex',justifyContent:'space-between',marginBottom:5,fontSize:12}}>
+                <span style={{color:C.textS}}>{l}</span><strong style={{color:col}}>{v}</strong>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* SVG Map */}
-        <div style={{flex:1,background:C.white,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',position:'relative'}}>
-          <svg width="100%" viewBox="0 0 170 640" style={{background:'#EBF5FB',display:'block'}}>
-            {/* Ocean background */}
-            <rect width="170" height="640" fill="#D6EEF8"/>
-            {/* Region polygons */}
-            {regions.map(r=>(
-              <polygon key={r.id} points={r.points}
-                fill={regionColor(r.code)}
-                stroke="#aaa" strokeWidth="0.5"
-                style={{cursor:'pointer',transition:'opacity 0.15s'}}
-                onMouseEnter={e=>{e.target.style.opacity='0.75';setHover(r)}}
-                onMouseLeave={e=>{e.target.style.opacity='1';setHover(null)}}
-              />
+        {/* MAPA SVG */}
+        <div style={{flex:1,background:'#EEF7FF',border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',position:'relative'}}>
+          <svg viewBox="0 0 160 710" width="100%" style={{display:'block',maxHeight:680}}>
+            {/* Regiones */}
+            {CHILE_REGIONES.map(r=>(
+              <g key={r.id}>
+                <path d={r.path} fill={r.color} stroke="white" strokeWidth="1.5" opacity="0.85"/>
+                <text
+                  x={parseInt(r.path.match(/M (\d+)/)[1]) + 4}
+                  y={parseInt(r.path.match(/L \d+,(\d+)/)[1]) + 14}
+                  fontSize="7" fill="#333" fontWeight="700" style={{pointerEvents:'none'}}>
+                  {r.id}
+                </text>
+              </g>
             ))}
-            {/* Region labels */}
-            {regions.map(r=>{
-              const pts = r.points.split(' ').map(p=>p.split(',').map(Number))
-              const cx = Math.round(pts.reduce((s,p)=>s+p[0],0)/pts.length)
-              const cy = Math.round(pts.reduce((s,p)=>s+p[1],0)/pts.length)
-              return(<text key={r.id} x={cx} y={cy} textAnchor="middle" fontSize="7" fill="#555" fontWeight="600" style={{pointerEvents:'none'}}>{r.code}</text>)
-            })}
-            {/* Site dots */}
+
+            {/* Puntos de sitios */}
             {SITIOS.map(s=>{
-              const {x,y}=toXY(s.lat,s.lng)
-              const st=stats[s.id]||{}
-              const col=st.aut>0?'#2E7D32':st.pend>0?'#E65100':'#1565C0'
-              const isH=hover?.id && regionSites[hover.id]?.find(x=>x.id===s.id)
+              const pt = toSVG(s.lat, s.lng)
+              const isH = hover===s.id
+              const col = puntColor(s.id)
               return(
-                <g key={s.id}>
-                  <circle cx={x} cy={y} r={isH?7:5} fill={col} stroke="white" strokeWidth="1.5" opacity={0.9} style={{cursor:'pointer'}}/>
-                  {isH&&<text x={x+8} y={y+3} fontSize="7" fill="#333" fontWeight="600">{s.id.replace('CL-TAR-','')}</text>}
+                <g key={s.id} style={{cursor:'pointer'}}
+                   onMouseEnter={()=>setHover(s.id)}
+                   onMouseLeave={()=>setHover(null)}>
+                  {isH&&<circle cx={pt.x} cy={pt.y} r={12} fill={col} opacity={0.2}/>}
+                  <circle cx={pt.x} cy={pt.y} r={isH?7:5} fill={col} stroke="white" strokeWidth={1.5}/>
+                  {isH&&(
+                    <text x={pt.x+9} y={pt.y+4} fontSize="7" fill="#333" fontWeight="700"
+                      style={{pointerEvents:'none',textShadow:'0 0 3px white'}}>
+                      {s.id.replace('CL-TAR-','T').replace('CL','').slice(0,5)}
+                    </text>
+                  )}
                 </g>
               )
             })}
           </svg>
-          {/* Hover tooltip */}
-          {hover&&(
-            <div style={{position:'absolute',bottom:12,left:12,background:'rgba(255,255,255,0.95)',border:`1px solid ${C.border}`,borderRadius:6,padding:'10px 14px',boxShadow:'0 2px 8px #0002',maxWidth:200}}>
-              <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>{hover.name}</div>
-              {(regionSites[hover.code]||[]).map(s=>(
-                <div key={s.id} style={{fontSize:11,color:C.textS,marginBottom:2,display:'flex',justifyContent:'space-between',gap:12}}>
-                  <span>{s.id}</span><span style={{fontWeight:600,color:C.blue}}>{stats[s.id]?.total||0} sol.</span>
-                </div>
-              ))}
-              {!(regionSites[hover.code]||[]).length&&<div style={{fontSize:11,color:C.gray4}}>Sin sitios ATP</div>}
-            </div>
-          )}
         </div>
+
+        {/* Tabla derecha */}
+        <div style={{width:190,flexShrink:0}}>
+          <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:12}}>
+            <div style={{fontWeight:600,fontSize:12,marginBottom:10}}>Sitios por región</div>
+            {Object.entries(sitiosPorRegion).sort((a,b)=>b[1]-a[1]).map(([reg,n])=>(
+              <div key={reg} style={{marginBottom:6}}>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}}>
+                  <span style={{color:C.textS,flex:1}}>{reg}</span>
+                  <strong style={{color:C.blue}}>{n}</strong>
+                </div>
+                <div style={{height:4,background:C.gray2,borderRadius:2}}>
+                  <div style={{height:'100%',background:C.blue,borderRadius:2,width:`${n/SITIOS.length*100}%`}}/>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
       </div>
     </div>
   )
 }
 
-// ── DASHBOARD ─────────────────────────────────────────────────
 function TabDashboard({solicitudes}){
   const total = solicitudes.length || 1
   const aut   = solicitudes.filter(s=>s.estado==='Autorizado').length
@@ -521,116 +573,188 @@ function TabColocalizaciones(){
   )
 }
 
-// ── REPORTERÍA ────────────────────────────────────────────────
-function TabReporteria({solicitudes,trabajadores}){
-  function descargarCSV(){
-    const h=['ID','Ref Cliente','Operador','Empresa','Trabajo','Sitio','Desde','Hasta','Estado','Técnicos','Tiempo (min)']
-    const r=solicitudes.map(s=>[s.id,s.refCliente||'',s.operador,s.empresaNombre||s.empresa,s.trabajo,s.sitio,s.desde||'',s.hasta||'',s.estado,(s.trabajadores||[]).map(t=>t.nombre).join(' | '),(s.tsEnviado&&s.tsAutorizado)?Math.round((new Date(s.tsAutorizado)-new Date(s.tsEnviado))/60000):''])
-    const csv=[h,...r].map(row=>row.map(v=>`"${v}"`).join(',')).join('\n')
-    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'}));a.download=`ATP_Solicitudes_${new Date().toISOString().split('T')[0]}.csv`;a.click()
-  }
+// ── REPORTERÍA ─────────────────────────────────────────────────
+function TabReporteria({solicitudes, trabajadores}){
+  const [generando, setGenerando] = useState(false)
 
-  function descargarExcel(){
-    const wb = XLSX.utils.book_new()
-
-    // Hoja 1: Solicitudes
-    const solData = [
-      ['ID','Ref Cliente','Operador','Empresa Contratista','Tipo Trabajo','Sitio','Desde','Hasta','Estado','Técnicos','Correo Mandante','Correo Contratista','Tiempo Autorización (min)'],
-      ...solicitudes.map(s=>[
-        s.id, s.refCliente||'', s.operador, s.empresaNombre||s.empresa, s.trabajo,
-        s.sitio, s.desde||'', s.hasta||'', s.estado,
-        (s.trabajadores||[]).map(t=>`${t.nombre} (${t.rut})`).join(' | '),
-        s.correoMandante||'', s.correoContratista||'',
-        (s.tsEnviado&&s.tsAutorizado)?Math.round((new Date(s.tsAutorizado)-new Date(s.tsEnviado))/60000):''
-      ])
-    ]
-    const ws1 = XLSX.utils.aoa_to_sheet(solData)
-    ws1['!cols'] = solData[0].map((_,i)=>({wch:i===0?16:i===2||i===3?28:i===10||i===11?30:14}))
-    XLSX.utils.book_append_sheet(wb,ws1,'Solicitudes')
-
-    // Hoja 2: Resumen por operador
-    const opResumen = [
-      ['Operador','Total','Autorizadas','Rechazadas','En Gestión','% Autorización','Tiempo Prom. (min)'],
-      ...['Telefónica Móviles Chile S.A.','Entel PCS','Claro Chile S.A.','WOM S.A.'].map(op=>{
-        const mySols = solicitudes.filter(s=>s.operador===op)
-        const aut = mySols.filter(s=>s.estado==='Autorizado').length
-        const ts  = mySols.filter(s=>s.tsEnviado&&s.tsAutorizado).map(s=>new Date(s.tsAutorizado)-new Date(s.tsEnviado))
-        return [OP_SHORT[op]||op, mySols.length, aut, mySols.filter(s=>s.estado==='Rechazado').length, mySols.filter(s=>['En Gestión Propietario','Validado'].includes(s.estado)).length,
-          mySols.length?`${Math.round(aut/mySols.length*100)}%`:'—',
-          ts.length?Math.round(ts.reduce((a,b)=>a+b,0)/ts.length/60000):'—']
+  async function descargarExcel(){
+    setGenerando(true)
+    try {
+      // Carga SheetJS dinámicamente
+      await new Promise((res,rej)=>{
+        if(window.XLSX){ res(); return }
+        const s=document.createElement('script')
+        s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
+        s.onload=res; s.onerror=rej
+        document.head.appendChild(s)
       })
-    ]
-    const ws2 = XLSX.utils.aoa_to_sheet(opResumen)
-    XLSX.utils.book_append_sheet(wb,ws2,'Resumen Operadores')
+      const XLSX = window.XLSX
+      const wb = XLSX.utils.book_new()
 
-    // Hoja 3: Sitios
-    const sitiosData = [
-      ['Sitio ID','Nombre','Región','Propietario','Total Solicitudes','Autorizadas','Pendientes','Operadores colocalizados'],
-      ...SITIOS.map(s=>{
-        const mySols=solicitudes.filter(x=>x.sitio===s.id)
-        return [s.id,s.nombre,s.regionLabel,s.propietario,mySols.length,mySols.filter(x=>x.estado==='Autorizado').length,mySols.filter(x=>['En Gestión Propietario','Validado'].includes(x.estado)).length,(COLOCALIZACIONES[s.id]||[]).map(o=>OP_SHORT[o]||o).join(', ')]
+      // ── HOJA 1: Solicitudes ──────────────────────────────────
+      const h1 = ['ID','Ref Cliente','Operador','Empresa Contratista','RUT Empresa','Tipo Trabajo','Sitio','Nombre Sitio','Región','Desde','Hasta','Días','Estado','Automático','T.Aut.(min)','Correo Mandante','Correo Contratista','N° Técnicos','Técnicos']
+      const r1 = solicitudes.map(s=>{
+        const sitio = SITIOS.find(x=>x.id===s.sitio)
+        const dias  = s.desde&&s.hasta ? Math.ceil((new Date(s.hasta)-new Date(s.desde))/86400000)+1 : ''
+        const tMin  = s.tsEnviado&&s.tsAutorizado ? Math.round((new Date(s.tsAutorizado)-new Date(s.tsEnviado))/60000) : ''
+        const tecns = (s.trabajadores||[]).map(t=>`${t.nombre}(${t.rut})`).join(' | ')
+        return [s.id, s.refCliente||'', s.operador, s.empresaNombre||s.empresa, s.empresa||'', s.trabajo, s.sitio, sitio?.nombre||'', sitio?.regionLabel||'', s.desde||'', s.hasta||'', dias, s.estado, s.auto?'Sí':'No', tMin, s.correoMandante||'', s.correoContratista||'', s.trabajadores?.length||0, tecns]
       })
-    ]
-    const ws3 = XLSX.utils.aoa_to_sheet(sitiosData)
-    XLSX.utils.book_append_sheet(wb,ws3,'Sitios')
+      const ws1 = XLSX.utils.aoa_to_sheet([h1,...r1])
+      ws1['!cols'] = h1.map((_,i)=>({wch: [10,12,22,28,14,26,10,24,14,12,12,6,22,10,14,28,28,8,40][i]||14}))
+      XLSX.utils.book_append_sheet(wb, ws1, 'Solicitudes')
 
-    // Hoja 4: Trabajadores
-    if(trabajadores.length>0){
-      const trabData=[['RUT','Nombre','Empresa','Mandante','Acreditado','Vencimiento'],...trabajadores.map(t=>[t.rut,t.nombre,t.empresa_nombre||'',t.mandante||'',t.acreditado?'Sí':'No',t.vencimiento||''])]
-      XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(trabData),'Trabajadores')
+      // ── HOJA 2: Resumen por Operador ─────────────────────────
+      const ops = ['Telefónica Móviles Chile S.A.','Entel PCS','Claro Chile S.A.','WOM S.A.']
+      const h2  = ['Operador','Total','Autorizadas','Rechazadas','En Gestión','% Aprobación','T.Prom.Aut.(min)']
+      const r2  = ops.map(op=>{
+        const mias = solicitudes.filter(s=>s.operador===op)
+        const aut  = mias.filter(s=>s.estado==='Autorizado')
+        const ts   = aut.filter(s=>s.tsEnviado&&s.tsAutorizado).map(s=>Math.round((new Date(s.tsAutorizado)-new Date(s.tsEnviado))/60000))
+        const prom = ts.length ? Math.round(ts.reduce((a,b)=>a+b,0)/ts.length) : '—'
+        return [op, mias.length, aut.length, mias.filter(s=>s.estado==='Rechazado').length, mias.filter(s=>['En Gestión Propietario','Validado'].includes(s.estado)).length, mias.length?`${Math.round(aut.length/mias.length*100)}%`:'0%', prom]
+      })
+      const ws2 = XLSX.utils.aoa_to_sheet([h2,...r2])
+      ws2['!cols'] = [{wch:30},{wch:8},{wch:12},{wch:12},{wch:12},{wch:14},{wch:18}]
+      XLSX.utils.book_append_sheet(wb, ws2, 'Por Operador')
+
+      // ── HOJA 3: Resumen por Estado ───────────────────────────
+      const estados = ['Borrador','Enviado','En Validación','Validado','En Gestión Propietario','Autorizado','Rechazado']
+      const h3 = ['Estado','Cantidad','%']
+      const r3 = estados.map(e=>{
+        const n = solicitudes.filter(s=>s.estado===e).length
+        return [e, n, solicitudes.length ? `${Math.round(n/solicitudes.length*100)}%` : '0%']
+      })
+      const ws3 = XLSX.utils.aoa_to_sheet([h3,...r3])
+      ws3['!cols'] = [{wch:28},{wch:10},{wch:8}]
+      XLSX.utils.book_append_sheet(wb, ws3, 'Por Estado')
+
+      // ── HOJA 4: Resumen por Sitio ────────────────────────────
+      const h4 = ['Sitio ID','Nombre','Región','Tipo','Total Sol.','Autorizadas','Pendientes','Rechazadas']
+      const r4 = SITIOS.map(s=>{
+        const mias = solicitudes.filter(x=>x.sitio===s.id)
+        return [s.id, s.nombre, s.regionLabel, s.tipo, mias.length, mias.filter(x=>x.estado==='Autorizado').length, mias.filter(x=>['En Gestión Propietario','Validado'].includes(x.estado)).length, mias.filter(x=>x.estado==='Rechazado').length]
+      }).filter(r=>r[4]>0)
+      const ws4 = XLSX.utils.aoa_to_sheet([h4,...r4])
+      ws4['!cols'] = [{wch:14},{wch:26},{wch:16},{wch:20},{wch:10},{wch:12},{wch:12},{wch:12}]
+      XLSX.utils.book_append_sheet(wb, ws4, 'Por Sitio')
+
+      // ── HOJA 5: Tiempos de Respuesta ─────────────────────────
+      const autorizadas = solicitudes.filter(s=>s.estado==='Autorizado'&&s.tsEnviado&&s.tsAutorizado)
+      const h5 = ['ID Solicitud','Operador','Sitio','Trabajo','T.Aut.(min)','T.Aut.(horas)','Enviado','Autorizado']
+      const r5 = autorizadas.map(s=>{
+        const minutos = Math.round((new Date(s.tsAutorizado)-new Date(s.tsEnviado))/60000)
+        return [s.id, s.operador, s.sitio, s.trabajo, minutos, Math.round(minutos/60*10)/10, new Date(s.tsEnviado).toLocaleString('es-CL'), new Date(s.tsAutorizado).toLocaleString('es-CL')]
+      })
+      const ws5 = XLSX.utils.aoa_to_sheet([h5,...r5])
+      ws5['!cols'] = [{wch:16},{wch:24},{wch:12},{wch:26},{wch:12},{wch:14},{wch:20},{wch:20}]
+      XLSX.utils.book_append_sheet(wb, ws5, 'Tiempos Respuesta')
+
+      // ── HOJA 6: Trabajadores ─────────────────────────────────
+      if(trabajadores?.length){
+        const h6 = ['RUT','Nombre','Empresa','Mandante','Acreditado','Vencimiento','Motivo']
+        const r6 = trabajadores.map(t=>[t.rut, t.nombre, t.empresa_nombre||'', t.operador||'', t.acreditado?'Sí':'No', t.vencimiento||'', t.motivo_no_acreditado||''])
+        const ws6 = XLSX.utils.aoa_to_sheet([h6,...r6])
+        ws6['!cols'] = [{wch:14},{wch:28},{wch:28},{wch:26},{wch:10},{wch:14},{wch:30}]
+        XLSX.utils.book_append_sheet(wb, ws6, 'Trabajadores')
+      }
+
+      const fecha = new Date().toISOString().split('T')[0]
+      XLSX.writeFile(wb, `ATP_Reporte_${fecha}.xlsx`)
+    } catch(e){
+      console.error(e)
+      alert('Error generando Excel: '+e.message)
     }
-
-    XLSX.writeFile(wb,`ATP_Reporte_${new Date().toISOString().split('T')[0]}.xlsx`)
+    setGenerando(false)
   }
+
+  function descargarCSV(){
+    const h=['ID','Operador','Empresa','Trabajo','Sitio','Desde','Hasta','Estado','T.Aut.(min)']
+    const r=solicitudes.map(s=>{
+      const t=s.tsEnviado&&s.tsAutorizado?Math.round((new Date(s.tsAutorizado)-new Date(s.tsEnviado))/60000):''
+      return[s.id,s.operador,s.empresaNombre||s.empresa,s.trabajo,s.sitio,s.desde||'',s.hasta||'',s.estado,t]
+    })
+    const csv=[h,...r].map(row=>row.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n')
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));a.download=`ATP_${new Date().toISOString().split('T')[0]}.csv`;a.click()
+  }
+
+  const total=solicitudes.length||1
+  const aut=solicitudes.filter(s=>s.estado==='Autorizado').length
+  const tiempos=solicitudes.filter(s=>s.tsEnviado&&s.tsAutorizado).map(s=>Math.round((new Date(s.tsAutorizado)-new Date(s.tsEnviado))/60000))
+  const promMin=tiempos.length?Math.round(tiempos.reduce((a,b)=>a+b,0)/tiempos.length):null
 
   return(
     <div style={{animation:'fadeIn 0.3s ease'}}>
       <h2 style={{margin:'0 0 4px',fontSize:18,fontWeight:700}}>Reportería y Exportación</h2>
-      <p style={{color:C.textS,fontSize:13,margin:'0 0 20px'}}>Descarga reportes completos en diferentes formatos.</p>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:20}}>
-        {[{fmt:'csv',icon:'📊',label:'CSV',desc:'Compatible con Excel y Sheets',ok:true,fn:descargarCSV},
-          {fmt:'xlsx',icon:'📗',label:'Excel (.xlsx)',desc:'Con hojas: solicitudes, resumen, sitios, trabajadores',ok:true,fn:descargarExcel},
-          {fmt:'pdf',icon:'📄',label:'PDF / PPT',desc:'Versión con gráficos — próximamente',ok:false}].map(f=>(
-          <div key={f.fmt} style={{background:C.white,border:`1px solid ${f.ok?C.blue:C.border}`,borderRadius:6,padding:16}}>
-            <div style={{fontSize:28,marginBottom:6}}>{f.icon}</div>
-            <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>{f.label}</div>
-            <div style={{fontSize:11,color:C.textS,marginBottom:12}}>{f.desc}</div>
-            <button onClick={f.fn} disabled={!f.ok} style={{background:f.ok?C.blue:C.gray3,color:f.ok?'#fff':C.gray4,border:'none',borderRadius:3,padding:'6px 16px',fontSize:12,fontWeight:700,cursor:f.ok?'pointer':'not-allowed'}}>
-              {f.ok?'⬇️ Descargar':'Próximamente'}
-            </button>
+      <p style={{color:C.textS,fontSize:13,margin:'0 0 20px'}}>Descarga informes del sistema en distintos formatos.</p>
+
+      {/* KPIs rápidos */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,marginBottom:20}}>
+        {[['Total',solicitudes.length,C.blue],['Autorizadas',`${aut} (${Math.round(aut/total*100)}%)`,C.green],['Rechazadas',solicitudes.filter(s=>s.estado==='Rechazado').length,C.red],['T.Prom.Aut.',promMin!=null?promMin+' min':'—',C.teal]].map(([l,v,col])=>(
+          <div key={l} style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:'12px 16px',textAlign:'center',borderTop:`3px solid ${col}`}}>
+            <div style={{fontWeight:800,fontSize:22,color:col}}>{v}</div>
+            <div style={{fontSize:11,color:C.textS,marginTop:2}}>{l}</div>
           </div>
         ))}
       </div>
-      <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,overflow:'hidden'}}>
-        <div style={{background:C.gray1,padding:'10px 16px',borderBottom:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <span style={{fontWeight:600,fontSize:13}}>Vista previa ({solicitudes.length} registros)</span>
-          <span style={{fontSize:11,color:C.textS}}>Excel incluye: Solicitudes · Resumen operadores · Sitios · Trabajadores</span>
+
+      {/* Botones descarga */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:24}}>
+        <div style={{background:C.white,border:`2px solid ${C.green}55`,borderRadius:8,padding:20}}>
+          <div style={{fontSize:36,marginBottom:8}}>📊</div>
+          <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>Excel (.xlsx)</div>
+          <div style={{fontSize:12,color:C.textS,marginBottom:4}}>6 hojas: Solicitudes · Por Operador · Por Estado · Por Sitio · Tiempos de Respuesta · Trabajadores</div>
+          <div style={{fontSize:11,color:C.green,marginBottom:14}}>✓ Compatible con Excel, Google Sheets, Numbers</div>
+          <button onClick={descargarExcel} disabled={generando}
+            style={{background:generando?C.gray3:C.green,color:generando?C.gray4:'#fff',border:'none',borderRadius:4,padding:'9px 22px',fontWeight:700,cursor:generando?'not-allowed':'pointer',fontSize:13}}>
+            {generando?'⏳ Generando...':'⬇️ Descargar Excel'}
+          </button>
         </div>
-        <div style={{overflowX:'auto'}}>
-          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
-            <thead><tr style={{background:C.gray2}}>{['ID','Operador','Trabajo','Sitio','Fechas','Estado','Tiempo'].map(h=><th key={h} style={{padding:'8px 12px',textAlign:'left',fontWeight:600,color:C.textS,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap'}}>{h}</th>)}</tr></thead>
-            <tbody>{solicitudes.slice(0,20).map((s,i)=>{
-              const durMs=s.tsEnviado&&s.tsAutorizado?new Date(s.tsAutorizado)-new Date(s.tsEnviado):null
-              return(
-                <tr key={s.id} style={{borderBottom:`1px solid ${C.gray2}`,background:i%2===0?C.white:C.gray1}}>
+        <div style={{background:C.white,border:`2px solid ${C.blue}55`,borderRadius:8,padding:20}}>
+          <div style={{fontSize:36,marginBottom:8}}>📄</div>
+          <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>CSV (.csv)</div>
+          <div style={{fontSize:12,color:C.textS,marginBottom:4}}>Datos básicos de solicitudes. Compatible con cualquier programa.</div>
+          <div style={{fontSize:11,color:C.blue,marginBottom:14}}>✓ Apertura inmediata, sin macros</div>
+          <button onClick={descargarCSV}
+            style={{background:C.blue,color:'#fff',border:'none',borderRadius:4,padding:'9px 22px',fontWeight:700,cursor:'pointer',fontSize:13}}>
+            ⬇️ Descargar CSV
+          </button>
+        </div>
+      </div>
+
+      {/* Vista previa */}
+      <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,overflow:'hidden'}}>
+        <div style={{background:C.gray1,padding:'10px 16px',borderBottom:`1px solid ${C.border}`,fontWeight:600,fontSize:13}}>
+          Vista previa — {solicitudes.length} registros
+        </div>
+        {solicitudes.length===0
+          ?<div style={{padding:32,textAlign:'center',color:C.textS}}>No hay solicitudes aún</div>
+          :<div style={{overflowX:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+              <thead><tr style={{background:C.gray2}}>
+                {['ID','Operador','Trabajo','Sitio','Fechas','Estado','T.Aut.'].map(h=><th key={h} style={{padding:'8px 12px',textAlign:'left',fontWeight:600,color:C.textS,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap'}}>{h}</th>)}
+              </tr></thead>
+              <tbody>{solicitudes.map((s,i)=>{
+                const ms=s.tsEnviado&&s.tsAutorizado?new Date(s.tsAutorizado)-new Date(s.tsEnviado):null
+                const mins=ms?Math.round(ms/60000):null
+                return<tr key={s.id} style={{borderBottom:`1px solid ${C.gray2}`,background:i%2===0?C.white:C.gray1}}>
                   <td style={{padding:'7px 12px',fontFamily:'monospace',fontSize:11,color:C.red,fontWeight:600}}>{s.id}</td>
                   <td style={{padding:'7px 12px'}}>{OP_SHORT[s.operador]||s.operador}</td>
                   <td style={{padding:'7px 12px',fontSize:11}}>{s.trabajo}</td>
                   <td style={{padding:'7px 12px',fontFamily:'monospace',fontSize:11}}>{s.sitio}</td>
-                  <td style={{padding:'7px 12px',fontSize:11}}>{s.desde} → {s.hasta}</td>
+                  <td style={{padding:'7px 12px',fontSize:11,whiteSpace:'nowrap'}}>{s.desde} → {s.hasta}</td>
                   <td style={{padding:'7px 12px'}}><Badge estado={s.estado} small/></td>
-                  <td style={{padding:'7px 12px',fontSize:11,color:durMs?C.green:C.gray4}}>{durMs?formatDuration(durMs):'—'}</td>
+                  <td style={{padding:'7px 12px',fontSize:11,color:C.teal,fontWeight:600}}>{mins!=null?mins+' min':'—'}</td>
                 </tr>
-              )
-            })}</tbody>
-          </table>
-        </div>
+              })}</tbody>
+            </table>
+          </div>
+        }
       </div>
     </div>
   )
 }
 
-// ── TRABAJADORES ACREDITADOS ──────────────────────────────────
 function TabTrabajadores({trabajadores,setTrabajadores,empresas,showNotif}){
   const [busq,setBusq]=useState('')
   const [showForm,setShowForm]=useState(false)
