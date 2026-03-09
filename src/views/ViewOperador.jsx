@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase, getSolicitudes, upsertSolicitud, fromDb, getAlertas, getTrabajadores, getEmpresas, upsertEmpresa } from '../lib/supabase.js'
-import { SITIOS, COLOCALIZACIONES, EMPRESAS_DEFAULT, TIPOS_TRABAJO, VENTANA_MAX, TRABAJO_INFORMAL, ZONAS, ESTADO_COLOR, C, OP_COLOR, OP_SHORT, validarSolicitud, daysBetween, nextId, formatRUT, todayISO } from '../shared/data.js'
+import { SITIOS, COLOCALIZACIONES, EMPRESAS_DEFAULT, TIPOS_TRABAJO, VENTANA_MAX, TRABAJO_INFORMAL, ZONAS, ESTADO_COLOR, C, OP_COLOR, OP_SHORT, validarSolicitud, daysBetween, nextId, formatRUT } from '../shared/data.js'
 import { ATPLogo, Badge, AutoPill, FlowTracker, SolicitudCard, DetalleModal, Notif, GlobalStyle } from '../shared/components.jsx'
 import { enviarCorreoPropietario } from '../lib/email.js'
 
@@ -424,8 +424,8 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
         <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:18}}>
           <div style={{fontWeight:600,fontSize:13,marginBottom:12,paddingBottom:8,borderBottom:`1px solid ${C.border}`}}>Información del Requerimiento</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-            <div><label style={lbl}>Fecha inicio <span style={{color:C.red}}>*</span></label><input type="date" min={today()} value={form.desde} onChange={e=>set('desde',e.target.value)} style={inp}/></div>
-            <div><label style={lbl}>Fecha fin <span style={{color:C.red}}>*</span></label><input type="date" min={form.desde||today()} value={form.hasta} onChange={e=>set('hasta',e.target.value)} style={inp}/></div>
+            <div><label style={lbl}>Fecha inicio <span style={{color:C.red}}>*</span></label><input type="date" min={new Date().toISOString().split("T")[0]} value={form.desde} onChange={e=>set('desde',e.target.value)} style={inp}/></div>
+            <div><label style={lbl}>Fecha fin <span style={{color:C.red}}>*</span></label><input type="date" min={form.desde||new Date().toISOString().split("T")[0]} value={form.hasta} onChange={e=>set('hasta',e.target.value)} style={inp}/></div>
           </div>
           <div style={{marginBottom:10}}>
             <label style={lbl}>Tipo de trabajo <span style={{color:C.red}}>*</span></label>
