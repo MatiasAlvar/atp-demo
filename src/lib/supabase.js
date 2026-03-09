@@ -133,3 +133,16 @@ export function fromDb(row) {
     tsAutorizado: row.ts_autorizado || '',
   }
 }
+
+// ── SITIOS CONFIG (contactos editables) ───────────────────────
+export async function getSitiosConfig() {
+  const { data, error } = await supabase.from('sitios_config').select('*')
+  if (error) { console.error(error); return {} }
+  return Object.fromEntries((data||[]).map(r => [r.sitio_id, r]))
+}
+
+export async function upsertSitioConfig(cfg) {
+  const { error } = await supabase.from('sitios_config').upsert(cfg, { onConflict: 'sitio_id' })
+  if (error) console.error(error)
+  return !error
+}

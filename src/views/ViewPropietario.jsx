@@ -27,12 +27,21 @@ export default function ViewPropietario({ user, onLogout }) {
     return () => supabase.removeChannel(ch)
   }, [])
 
-  // Acción desde URL query params (cuando propietario hace clic en correo)
+  // Acción desde correo: App.jsx guarda en sessionStorage, leemos aquí
   useEffect(() => {
+    try {
+      const pending = sessionStorage.getItem('atp_pending_action')
+      if (pending) {
+        const { id, action } = JSON.parse(pending)
+        sessionStorage.removeItem('atp_pending_action')
+        setAccion({ id, tipo: action })
+      }
+    } catch {}
+    // También leer desde URL directamente (fallback)
     const params = new URLSearchParams(window.location.search)
     const id     = params.get('id')
     const action = params.get('action')
-    if (id && action) {
+    if (id && (action === 'autorizar' || action === 'rechazar')) {
       setAccion({ id, tipo: action })
       window.history.replaceState({}, '', window.location.pathname)
     }

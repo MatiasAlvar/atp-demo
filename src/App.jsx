@@ -23,15 +23,21 @@ export default function App() {
     try { sessionStorage.removeItem(SESSION_KEY) } catch {}
   }
 
-  // Handle propietario action from email link
+  // Handle propietario action from email link (?id=SOL-001&action=autorizar|rechazar)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const action = params.get('action')
     const id     = params.get('id')
-    if (action && id) {
-      // Auto-login as propietario for email link flow
+    if ((action === 'autorizar' || action === 'rechazar') && id) {
+      // Buscar qué propietario tiene ese sitio
+      // Lo encontramos buscando en USERS cuál tiene ese sitio
+      // Por ahora usamos 'merced' como default, pero ViewPropietario
+      // filtra por sitios del propietario — si no lo tiene, mostrará sin pendientes
+      // En el futuro se puede expandir con más propietarios
       const propUser = { username: 'merced', ...USERS['merced'] }
       handleLogin(propUser)
+      // Guardamos la acción en sessionStorage para que ViewPropietario la lea
+      try { sessionStorage.setItem('atp_pending_action', JSON.stringify({ id, action })) } catch {}
     }
   }, [])
 

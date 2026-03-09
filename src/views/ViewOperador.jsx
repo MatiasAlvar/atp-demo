@@ -468,27 +468,70 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
         </div>
         {form.trabajadores.map((t,i)=>{
           const acc = acreditado(t.rut)
+          // Sugerencias por RUT o nombre
+          const sugs = trabajadores.filter(w => {
+            const q = t.rut.replace(/[.\-]/g,'').toLowerCase()
+            const qn = t.nombre.toLowerCase()
+            if (q.length >= 3) return w.rut.replace(/[.\-]/g,'').toLowerCase().includes(q)
+            if (qn.length >= 2) return w.nombre.toLowerCase().includes(qn)
+            return false
+          }).slice(0,5)
+          const showSugs = sugs.length > 0 && (t.rut.length >= 3 || t.nombre.length >= 2) && !validRUT(t.rut)
+
+          function autocompletar(w) {
+            const nw = [...form.trabajadores]
+            nw[i] = { rut: w.rut, nombre: w.nombre }
+            set('trabajadores', nw)
+          }
+
           return (
-            <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr auto auto',gap:8,marginBottom:8,alignItems:'start'}}>
-              <div>
-                <input placeholder="RUT (XX.XXX.XXX-X)" value={t.rut}
-                  onChange={e=>handleTrabajadorRUT(i,e.target.value)}
-                  style={{...inp,fontFamily:'monospace',borderColor:t.rut&&!validRUT(t.rut)?C.red:C.border}}/>
-                {t.rut && <div style={{fontSize:10,marginTop:2,color:validRUT(t.rut)?C.green:C.red}}>{validRUT(t.rut)?'✓':'✗ RUT inválido'}</div>}
+            <div key={i} style={{marginBottom:10}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr auto auto',gap:8,alignItems:'start'}}>
+                <div style={{position:'relative'}}>
+                  <input placeholder="RUT (XX.XXX.XXX-X)" value={t.rut}
+                    onChange={e=>handleTrabajadorRUT(i,e.target.value)}
+                    style={{...inp,fontFamily:'monospace',borderColor:t.rut&&!validRUT(t.rut)?C.orange:validRUT(t.rut)?C.green:C.border}}/>
+                  {t.rut && <div style={{fontSize:10,marginTop:2,color:validRUT(t.rut)?C.green:C.orange}}>{validRUT(t.rut)?'✓ RUT válido':'RUT incompleto...'}</div>}
+                </div>
+                <div style={{position:'relative'}}>
+                  <input placeholder="Nombre completo *" value={t.nombre}
+                    onChange={e=>{const nw=[...form.trabajadores];nw[i]={...nw[i],nombre:e.target.value};set('trabajadores',nw)}}
+                    style={{...inp}}/>
+                </div>
+                <div style={{paddingTop:6,textAlign:'center',minWidth:90}}>
+                  {t.rut && validRUT(t.rut) && (
+                    <div style={{fontSize:10,fontWeight:700,color:acc===null?C.gray4:acc?C.green:C.red}}>
+                      {acc===null?'❓ Desconocido':acc?'✅ Acreditado':'❌ No acreditado'}
+                    </div>
+                  )}
+                </div>
+                {i>0&&<button onClick={()=>set('trabajadores',form.trabajadores.filter((_,j)=>j!==i))} style={{background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,padding:'8px',cursor:'pointer',color:C.red,fontSize:12}}>✕</button>}
               </div>
-              <div>
-                <input placeholder="Nombre completo *" value={t.nombre}
-                  onChange={e=>{const nw=[...form.trabajadores];nw[i]={...nw[i],nombre:e.target.value};set('trabajadores',nw)}}
-                  style={{...inp,borderColor:!t.nombre?C.border:C.border}}/>
-              </div>
-              <div style={{paddingTop:8,textAlign:'center',minWidth:90}}>
-                {t.rut && validRUT(t.rut) && (
-                  <div style={{fontSize:10,fontWeight:700,color:acc===null?C.gray4:acc?C.green:C.red}}>
-                    {acc===null?'Desconocido':acc?'✓ Acreditado':'✗ No acreditado'}
+              {/* Sugerencias de autocompletado */}
+              {showSugs && (
+                <div style={{background:C.white,border:`1px solid ${C.blue}`,borderRadius:4,boxShadow:'0 4px 12px #0002',marginTop:2,zIndex:100,position:'relative'}}>
+                  <div style={{padding:'4px 10px',fontSize:10,color:C.textS,borderBottom:`1px solid ${C.gray2}`,fontWeight:600}}>
+                    👷 Trabajadores acreditados encontrados — clic para autocompletar
                   </div>
-                )}
-              </div>
-              {i>0&&<button onClick={()=>set('trabajadores',form.trabajadores.filter((_,j)=>j!==i))} style={{background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,padding:'8px',cursor:'pointer',color:C.red,fontSize:12,marginTop:0}}>✕</button>}
+                  {sugs.map(w=>(
+                    <div key={w.id} onMouseDown={()=>autocompletar(w)}
+                      style={{padding:'7px 12px',cursor:'pointer',fontSize:12,borderBottom:`1px solid ${C.gray2}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}
+                      onMouseEnter={e=>e.currentTarget.style.background=C.blueL}
+                      onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                      <div>
+                        <strong>{w.nombre}</strong>
+                        <span style={{marginLeft:8,fontFamily:'monospace',fontSize:11,color:C.textS}}>{w.rut}</span>
+                      </div>
+                      <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                        {w.empresa_nombre&&<span style={{fontSize:10,color:C.textS}}>{w.empresa_nombre}</span>}
+                        <span style={{fontSize:10,fontWeight:700,color:w.acreditado?C.green:C.red}}>
+                          {w.acreditado?'✅ Acred.':'❌ No acred.'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )
         })}

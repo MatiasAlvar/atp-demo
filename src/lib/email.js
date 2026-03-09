@@ -8,38 +8,28 @@ const APP_URL     = import.meta.env.VITE_APP_URL || (typeof window !== 'undefine
 
 emailjs.init(PUBLIC_KEY)
 
-// Obtiene el email del propietario: primero revisa overrides de localStorage, luego data.js
-function getEmailSitio(sitioId) {
+// Obtiene config del sitio: primero Supabase (vía cache en window), luego data.js
+async function getConfigSitio(sitioId) {
   try {
-    const overrides = JSON.parse(localStorage.getItem('atp_sitios_data') || '{}')
-    if (overrides[sitioId]?.email) return overrides[sitioId].email
+    const { getSitiosConfig } = await import('./supabase.js')
+    const configs = await getSitiosConfig()
+    if (configs[sitioId]) return configs[sitioId]
   } catch {}
-  const sitio = SITIOS.find(s => s.id === sitioId)
-  return sitio?.email || import.meta.env.VITE_PROPIETARIO_EMAIL || ''
-}
-
-function getContactoSitio(sitioId) {
-  try {
-    const overrides = JSON.parse(localStorage.getItem('atp_sitios_data') || '{}')
-    if (overrides[sitioId]?.contacto) return overrides[sitioId].contacto
-  } catch {}
-  const sitio = SITIOS.find(s => s.id === sitioId)
-  return sitio?.contacto || 'Propietario'
+  return SITIOS.find(s => s.id === sitioId) || {}
 }
 
 export async function enviarCorreoPropietario({ solicitud, sitio }) {
-  const emailDestino = getEmailSitio(sitio.id)
-  const contacto     = getContactoSitio(sitio.id)
-  const linkBase     = `${APP_URL}?action=propietario&id=${solicitud.id}`
+  const cfg           = await getConfigSitio(sitio.id)
+  const emailDestino  = cfg.email || sitio.email || import.meta.env.VITE_PROPIETARIO_EMAIL || ''
+  const contacto      = cfg.contacto || sitio.contacto || 'Propietario'
 
   if (!emailDestino) {
-    console.warn('⚠️ Sin email para sitio', sitio.id)
+    console.warn('⚠️ Sin email configurado para sitio', sitio.id)
     return false
   }
 
-  const tecnicos = (solicitud.trabajadores || [])
-    .map(t => `${t.nombre} (${t.rut})`)
-    .join(', ')
+  const tecnicos = (solicitud.trabajadores || []).map(t => `${t.nombre} (${t.rut})`).join(', ')
+  const linkBase = `${APP_URL}?id=${solicitud.id}`
 
   const params = {
     to_email:           emailDestino,
@@ -73,6 +63,14 @@ export async function enviarCorreoAutorizacion({ solicitud }) {
   const sitio    = SITIOS.find(s => s.id === solicitud.sitio)
   const tecnicos = (solicitud.trabajadores || []).map(t => `${t.nombre} (${t.rut})`).join(', ')
 
+  const destinos = [solicitud.correoMandante, solicitud.correoContratista]
+    .filter((e, i, arr) => e && e.trim() && arr.indexOf(e) === i)
+
+  if (destinos.length === 0) {
+    console.warn('⚠️ Sin correos destino para autorización, sol:', solicitud.id)
+    return false
+  }
+
   const params = {
     sitio_nombre:   sitio?.nombre || solicitud.sitio,
     sitio_id:       solicitud.sitio,
@@ -90,9 +88,6 @@ export async function enviarCorreoAutorizacion({ solicitud }) {
   }
 
   let enviados = 0
-  const destinos = [solicitud.correoMandante, solicitud.correoContratista]
-    .filter((e, i, arr) => e && arr.indexOf(e) === i) // únicos no vacíos
-
   for (const email of destinos) {
     try {
       await emailjs.send(SERVICE_ID, TEMPLATE_ID, {

@@ -537,45 +537,140 @@ function TabDashboard({solicitudes}){
 
 // ── COLOCALIZACIONES ──────────────────────────────────────────
 function TabColocalizaciones(){
-  const [busq,setBusq]=useState('')
-  const [editSitio,setEditSitio]=useState(null)
-  const [contactoEdit,setContactoEdit]=useState({})
-  const filtrado=SITIOS.filter(s=>s.id.toLowerCase().includes(busq.toLowerCase())||s.nombre.toLowerCase().includes(busq.toLowerCase())||(COLOCALIZACIONES[s.id]||[]).some(op=>op.toLowerCase().includes(busq.toLowerCase()))||s.propietario.toLowerCase().includes(busq.toLowerCase()))
+  const [busq,setBusq]           = useState('')
+  const [editSitio,setEditSitio] = useState(null)
+  const [configs,setConfigs]     = useState({})
+  const [editForm,setEditForm]   = useState({})
+  const [saving,setSaving]       = useState(false)
+
+  useEffect(()=>{
+    import('../lib/supabase.js').then(m=>m.getSitiosConfig()).then(setConfigs).catch(()=>{})
+  },[])
+
+  function startEdit(s){
+    const cfg = configs[s.id] || {}
+    setEditForm({
+      contacto: cfg.contacto || s.contacto || '',
+      tel:      cfg.tel      || s.tel      || '',
+      email:    cfg.email    || s.email    || '',
+      nota:     cfg.nota     || '',
+    })
+    setEditSitio(s.id)
+  }
+
+  async function guardar(sitioId){
+    setSaving(true)
+    try {
+      const { upsertSitioConfig } = await import('../lib/supabase.js')
+      await upsertSitioConfig({ sitio_id: sitioId, ...editForm })
+      setConfigs(c=>({...c,[sitioId]:{ sitio_id: sitioId, ...editForm }}))
+      setEditSitio(null)
+    } catch(e){ console.error(e) }
+    setSaving(false)
+  }
+
+  const filtrado=SITIOS.filter(s=>
+    s.id.toLowerCase().includes(busq.toLowerCase())||
+    s.nombre.toLowerCase().includes(busq.toLowerCase())||
+    (COLOCALIZACIONES[s.id]||[]).some(op=>op.toLowerCase().includes(busq.toLowerCase()))||
+    s.propietario.toLowerCase().includes(busq.toLowerCase())
+  )
+
+  const inp={width:'100%',border:`1px solid ${C.border}`,borderRadius:4,padding:'7px 10px',fontSize:12,fontFamily:'inherit'}
+  const lbl={display:'block',fontSize:11,fontWeight:600,color:C.textS,marginBottom:3}
+
   return(
     <div style={{animation:'fadeIn 0.3s ease'}}>
       <h2 style={{margin:'0 0 4px',fontSize:18,fontWeight:700}}>Colocalizaciones y Propietarios</h2>
+      <p style={{color:C.textS,fontSize:13,margin:'0 0 12px'}}>Edita el correo de cada sitio para que las solicitudes lleguen al propietario correcto.</p>
       <input value={busq} onChange={e=>setBusq(e.target.value)} placeholder="🔍 Buscar por sitio, operador, propietario..." style={{width:'100%',border:`1px solid ${C.border}`,borderRadius:6,padding:'10px 14px',fontSize:13,marginBottom:14,fontFamily:'inherit'}}/>
       <div style={{fontSize:11,color:C.textS,marginBottom:12}}>{filtrado.length} de {SITIOS.length} sitios</div>
       {filtrado.map(s=>{
-        const ops=COLOCALIZACIONES[s.id]||[]
-        const isEdit=editSitio===s.id
+        const ops    = COLOCALIZACIONES[s.id]||[]
+        const isEdit = editSitio===s.id
+        const cfg    = configs[s.id]||{}
+        const email  = cfg.email||s.email
+        const tel    = cfg.tel||s.tel
+        const contacto = cfg.contacto||s.contacto
         return(
           <div key={s.id} style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:'14px 18px',marginBottom:8}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
               <div>
-                <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:3}}><span style={{fontWeight:700,fontSize:13,color:C.red}}>{s.id}</span><span style={{fontSize:11,color:C.textS,background:C.gray1,borderRadius:3,padding:'1px 7px'}}>{s.siterra}</span><span style={{fontSize:11,color:C.textS}}>{s.tipo}</span></div>
+                <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:3}}>
+                  <span style={{fontWeight:700,fontSize:13,color:C.red}}>{s.id}</span>
+                  <span style={{fontSize:11,color:C.textS,background:C.gray1,borderRadius:3,padding:'1px 7px'}}>{s.siterra}</span>
+                  <span style={{fontSize:11,color:C.textS}}>{s.tipo}</span>
+                </div>
                 <div style={{fontWeight:600}}>{s.nombre}</div>
                 <div style={{fontSize:12,color:C.textS,marginTop:2}}>{s.comuna} · {s.regionLabel} · {s.altTotal}m</div>
               </div>
-              <button onClick={()=>setEditSitio(isEdit?null:s.id)} style={{background:isEdit?C.red:C.gray2,color:isEdit?'#fff':C.text,border:'none',borderRadius:4,padding:'4px 10px',cursor:'pointer',fontSize:11,fontWeight:600}}>{isEdit?'Cerrar':'✏️ Editar'}</button>
+              <button onClick={()=>isEdit?setEditSitio(null):startEdit(s)}
+                style={{background:isEdit?C.red:C.blue,color:'#fff',border:'none',borderRadius:4,padding:'5px 12px',cursor:'pointer',fontSize:11,fontWeight:600}}>
+                {isEdit?'✕ Cerrar':'✏️ Editar contacto'}
+              </button>
             </div>
-            {/* Propietario */}
-            <div style={{background:'#FFF8E1',border:'1px solid #FFE082',borderRadius:4,padding:'8px 12px',marginBottom:8,fontSize:12}}>
-              <div style={{fontWeight:600,color:C.amber,marginBottom:2}}>🏠 {s.propietario}</div>
-              <div style={{color:C.textS}}>Contacto: {s.contacto}</div>
-              {s.tel&&<div style={{color:C.textS}}>📞 {s.tel}</div>}
-              {s.email&&<div style={{color:C.textS}}>✉️ {s.email}</div>}
-            </div>
-            {isEdit&&(
-              <div style={{background:C.gray1,borderRadius:4,padding:12,marginBottom:8,fontSize:12}}>
-                <div style={{fontWeight:600,marginBottom:8,color:C.textS}}>✏️ Notas / comentarios del propietario</div>
-                <textarea rows={3} placeholder="Ej: Solo contesta llamadas · Disponible L-V 9-18h · Requiere aviso con 48h de anticipación..." style={{width:'100%',border:`1px solid ${C.border}`,borderRadius:4,padding:'6px 10px',fontSize:12,fontFamily:'inherit',resize:'vertical'}}/>
-                <button onClick={()=>setEditSitio(null)} style={{marginTop:8,background:C.green,color:'#fff',border:'none',borderRadius:3,padding:'5px 14px',fontSize:11,fontWeight:700,cursor:'pointer'}}>💾 Guardar nota</button>
+
+            {/* Info contacto actual */}
+            {!isEdit&&(
+              <div style={{background:'#FFF8E1',border:'1px solid #FFE082',borderRadius:4,padding:'8px 12px',marginBottom:8,fontSize:12}}>
+                <div style={{fontWeight:600,color:C.amber,marginBottom:4}}>🏠 {s.propietario}</div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:4,color:C.textS}}>
+                  <span>👤 {contacto||'—'}</span>
+                  <span>📞 {tel||'—'}</span>
+                  <span style={{gridColumn:'1/-1'}}>
+                    ✉️ {email
+                      ? <span style={{color:C.green,fontWeight:600}}>{email}</span>
+                      : <span style={{color:C.red}}>Sin correo — no se enviará notificación</span>}
+                  </span>
+                </div>
+                {cfg.nota&&<div style={{marginTop:6,color:C.textS,fontStyle:'italic'}}>📝 {cfg.nota}</div>}
               </div>
             )}
+
+            {/* Formulario de edición */}
+            {isEdit&&(
+              <div style={{background:'#EEF7FF',border:`1px solid ${C.blue}33`,borderRadius:6,padding:14,marginBottom:8}}>
+                <div style={{fontWeight:600,fontSize:12,color:C.blue,marginBottom:12}}>✏️ Editar información de contacto del propietario</div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+                  <div>
+                    <label style={lbl}>Nombre contacto</label>
+                    <input value={editForm.contacto} onChange={e=>setEditForm(f=>({...f,contacto:e.target.value}))} style={inp} placeholder="Nombre del contacto"/>
+                  </div>
+                  <div>
+                    <label style={lbl}>Teléfono</label>
+                    <input value={editForm.tel} onChange={e=>setEditForm(f=>({...f,tel:e.target.value}))} style={inp} placeholder="+56 9 1234 5678"/>
+                  </div>
+                  <div style={{gridColumn:'1/-1'}}>
+                    <label style={lbl}>Correo electrónico <span style={{color:C.red}}>*</span> — las solicitudes se enviarán a este correo</label>
+                    <input type="email" value={editForm.email} onChange={e=>setEditForm(f=>({...f,email:e.target.value}))} style={{...inp,borderColor:editForm.email?C.green:C.orange,fontWeight:editForm.email?600:'normal'}} placeholder="propietario@correo.cl"/>
+                    {editForm.email&&<div style={{fontSize:10,color:C.green,marginTop:2}}>✓ Las solicitudes se enviarán a este correo</div>}
+                    {!editForm.email&&<div style={{fontSize:10,color:C.orange,marginTop:2}}>⚠️ Sin correo: no se notificará al propietario</div>}
+                  </div>
+                  <div style={{gridColumn:'1/-1'}}>
+                    <label style={lbl}>Notas / instrucciones de contacto</label>
+                    <textarea rows={2} value={editForm.nota} onChange={e=>setEditForm(f=>({...f,nota:e.target.value}))} style={{...inp,resize:'vertical'}} placeholder="Ej: Solo contrata llamadas · Disponible L-V 9-18h · Requiere aviso 48h antes..."/>
+                  </div>
+                </div>
+                <div style={{display:'flex',gap:8'}}>
+                  <button onClick={()=>guardar(s.id)} disabled={saving}
+                    style={{background:saving?C.gray3:C.green,color:saving?C.gray4:'#fff',border:'none',borderRadius:4,padding:'7px 18px',fontWeight:700,cursor:saving?'wait':'pointer',fontSize:12}}>
+                    {saving?'⏳ Guardando...':'💾 Guardar cambios'}
+                  </button>
+                  <button onClick={()=>setEditSitio(null)}
+                    style={{background:'transparent',color:C.textS,border:`1px solid ${C.border}`,borderRadius:4,padding:'7px 14px',cursor:'pointer',fontSize:12}}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
               <span style={{fontSize:11,color:C.textS,fontWeight:600}}>Colocalizados ({ops.length}):</span>
-              {ops.map(op=><span key={op} style={{background:OP_COLOR[op]+'22',border:`1px solid ${OP_COLOR[op]}55`,color:OP_COLOR[op],borderRadius:10,padding:'2px 10px',fontSize:11,fontWeight:700}}>{OP_SHORT[op]||op}</span>)}
+              {ops.map(op=>(
+                <span key={op} style={{background:OP_COLOR[op]+'22',border:`1px solid ${OP_COLOR[op]}55`,color:OP_COLOR[op],borderRadius:10,padding:'2px 10px',fontSize:11,fontWeight:700}}>
+                  {OP_SHORT[op]||op}
+                </span>
+              ))}
             </div>
           </div>
         )
