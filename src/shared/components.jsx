@@ -1,4 +1,4 @@
-import { C, ESTADO_COLOR, OP_SHORT, OP_COLOR, SITIOS, daysBetween, VENTANA_MAX, formatDuration } from './data.js'
+import { C, ESTADO_COLOR, OP_SHORT, OP_COLOR, SITIOS, daysBetween, VENTANA_MAX } from './data.js'
 
 export const Badge = ({estado,small}) => {
   const s=ESTADO_COLOR[estado]||{bg:C.gray4,t:'#fff'}
@@ -120,7 +120,7 @@ export const DetalleModal = ({sol, onClose}) => {
           <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
             <Badge estado={sol.estado}/>
             {sol.auto&&<span style={{background:C.amberL,color:C.amber,borderRadius:10,padding:'2px 8px',fontSize:11,fontWeight:700}}>⚡ Auto</span>}
-            {durMs&&<span style={{background:C.greenL,color:C.green,borderRadius:10,padding:'2px 8px',fontSize:11,fontWeight:700}}>⏱️ {formatDuration(durMs)}</span>}
+            {durMs&&<span style={{background:C.greenL,color:C.green,borderRadius:10,padding:'2px 8px',fontSize:11,fontWeight:700}}>⏱️ {durMs<3600000?Math.round(durMs/60000)+' min':Math.floor(durMs/3600000)+'h '+Math.round((durMs%3600000)/60000)+'m'}</span>}
           </div>
           <FlowTracker estado={sol.estado}/>
           {sol.motivo&&<div style={{background:C.redL,borderRadius:4,padding:'8px 12px',fontSize:12,color:C.red,marginTop:10}}>⚠️ {sol.motivo}</div>}
