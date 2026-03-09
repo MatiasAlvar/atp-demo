@@ -24,9 +24,12 @@ export default function LoginPage({ onLogin }) {
   }
 
   const demoAccounts = [
-    { u:'atp',        p:'atp2026',   icon:'🔴', label:'ATP Admin',  desc:'Acceso total al sistema' },
-    { u:'telefonica', p:'tef2026',   icon:'🔵', label:'Telefónica', desc:'Vista operador — solo sus solicitudes' },
-    { u:'merced',     p:'prop2026',  icon:'🟢', label:'Propietario',desc:'Vista propietario — autorizar accesos' },
+    { u:'atp',        p:'atp2026',   icon:'🔴', label:'ATP Admin',   desc:'Acceso total al sistema' },
+    { u:'telefonica', p:'tef2026',   icon:'🔵', label:'Telefónica',  desc:'Operador — Tarapacá / RM' },
+    { u:'entel',      p:'entel2026', icon:'🟢', label:'Entel PCS',   desc:'Operador — Tarapacá / Antofagasta' },
+    { u:'claro',      p:'claro2026', icon:'🟠', label:'Claro Chile', desc:'Operador — Tarapacá / RM' },
+    { u:'wom',        p:'wom2026',   icon:'🟣', label:'WOM S.A.',    desc:'Operador — Tarapacá / Valparaíso' },
+    { u:'merced',     p:'prop2026',  icon:'⚫', label:'Propietario', desc:'Vista propietario — autorizar accesos' },
   ]
 
   return (
