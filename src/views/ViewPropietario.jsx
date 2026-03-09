@@ -60,15 +60,8 @@ export default function ViewPropietario({ user, onLogout }) {
     // Optimistic update
     setSolicitudes(prev => prev.map(s => s.id===solId ? {...s, estado:nuevoEstado, historial:nuevoHistorial} : s))
     await updateEstado(solId, nuevoEstado, { historial: nuevoHistorial, tsAutorizado: nuevoEstado==='Autorizado'?tsAut:undefined })
-    // Enviar correo si es autorización
-    if (nuevoEstado === 'Autorizado') {
-      try {
-        const { enviarCorreoAutorizacion } = await import('../lib/email.js')
-        await enviarCorreoAutorizacion({ solicitud:{...sol, estado:'Autorizado', tsAutorizado:tsAut} })
-      } catch(e){ console.error('email autorización propietario:', e) }
-    }
     setAccion({ id: solId, tipo: decision, done: true })
-    setTimeout(cargar, 1500)
+    // NO llamar cargar() — el realtime lo hace automáticamente
   }
 
   const pendientes  = solicitudes.filter(s => s.estado === 'En Gestión Propietario')

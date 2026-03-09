@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import * as XLSX from 'xlsx'
-import { supabase, getSolicitudes, updateEstado, getAlertas, upsertAlerta, resolverAlerta, getTrabajadores, upsertTrabajador, deleteTrabajador, getEmpresas, upsertEmpresa, fromDb } from '../lib/supabase.js'
+import { supabase, getSolicitudes, updateEstado, getAlertas, upsertAlerta, resolverAlerta, getTrabajadores, upsertTrabajador, deleteTrabajador, getEmpresas, upsertEmpresa, getSitiosConfig, upsertSitioConfig, fromDb } from '../lib/supabase.js'
 import { enviarCorreoPropietario } from '../lib/email.js'
 import { SITIOS, COLOCALIZACIONES, TIPOS_TRABAJO, VENTANA_MAX, TRABAJO_INFORMAL, ESTADOS, ESTADO_COLOR, C, OP_COLOR, OP_SHORT, OPERADORES, daysBetween, formatRUT, validRUT, todayISO } from '../shared/data.js'
 import { ATPLogo, Badge, AutoPill, FlowTracker, KpiCard, Notif, GlobalStyle } from '../shared/components.jsx'
@@ -52,15 +52,13 @@ export default function ViewATP({ user, onLogout }) {
     if(!sol) return
     const hist = [...(sol.historial||[]),{estado:'Autorizado',fecha:new Date().toLocaleString('es-CL'),auto:false}]
     const tsAut = new Date().toISOString()
-    // Optimistic update — actualizar UI inmediatamente sin esperar DB
-    setSolicitudes(prev => prev.map(s => s.id===id ? {...s,estado:'Autorizado',historial:hist,tsAutorizado:tsAut} : s))
+    const solAut = {...sol, estado:'Autorizado', historial:hist, tsAutorizado:tsAut}
+    // Actualizar UI inmediatamente
+    setSolicitudes(prev => prev.map(s => s.id===id ? solAut : s))
+    // Guardar en DB
     await updateEstado(id,'Autorizado',{historial:hist, tsAutorizado:tsAut})
-    try {
-      const { enviarCorreoAutorizacion } = await import('../lib/email.js')
-      await enviarCorreoAutorizacion({ solicitud:{...sol,estado:'Autorizado',tsAutorizado:tsAut} })
-    } catch(e){ console.error('email error',e) }
-    showNotif('✅ Acceso autorizado — correo enviado a mandante y contratista')
-    setTimeout(cargar, 1500) // refrescar después de que Supabase confirme
+    showNotif('✅ Acceso autorizado')
+    // NO llamar cargar() — el realtime lo hace automáticamente
   }
 
   const gestPend  = solicitudes.filter(s=>['Validado','En Gestión Propietario'].includes(s.estado)).length
@@ -547,7 +545,7 @@ function TabColocalizaciones(){
   const [saving,setSaving]       = useState(false)
 
   useEffect(()=>{
-    import('../lib/supabase.js').then(m=>m.getSitiosConfig()).then(setConfigs).catch(()=>{})
+    getSitiosConfig().then(setConfigs).catch(e=>console.error('sitios config error:',e))
   },[])
 
   function startEdit(s){
@@ -564,11 +562,12 @@ function TabColocalizaciones(){
   async function guardar(sitioId){
     setSaving(true)
     try {
-      const { upsertSitioConfig } = await import('../lib/supabase.js')
-      await upsertSitioConfig({ sitio_id: sitioId, ...editForm })
-      setConfigs(c=>({...c,[sitioId]:{ sitio_id: sitioId, ...editForm }}))
-      setEditSitio(null)
-    } catch(e){ console.error(e) }
+      const ok = await upsertSitioConfig({ sitio_id: sitioId, ...editForm })
+      if (ok !== false) {
+        setConfigs(c=>({...c,[sitioId]:{ sitio_id: sitioId, ...editForm }}))
+        setEditSitio(null)
+      }
+    } catch(e){ console.error('guardar sitio error:',e) }
     setSaving(false)
   }
 
