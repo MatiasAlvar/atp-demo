@@ -651,7 +651,7 @@ function TabColocalizaciones(){
                     <textarea rows={2} value={editForm.nota} onChange={e=>setEditForm(f=>({...f,nota:e.target.value}))} style={{...inp,resize:'vertical'}} placeholder="Ej: Solo contrata llamadas · Disponible L-V 9-18h · Requiere aviso 48h antes..."/>
                   </div>
                 </div>
-                <div style={{display:'flex',gap:8'}}>
+                <div style={{display:'flex',gap:8}}>
                   <button onClick={()=>guardar(s.id)} disabled={saving}
                     style={{background:saving?C.gray3:C.green,color:saving?C.gray4:'#fff',border:'none',borderRadius:4,padding:'7px 18px',fontWeight:700,cursor:saving?'wait':'pointer',fontSize:12}}>
                     {saving?'⏳ Guardando...':'💾 Guardar cambios'}
