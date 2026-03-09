@@ -182,69 +182,6 @@ function SolRow({ s, onClick }) {
     </div>
   )
 }
-) {
-  const durMs = sol.tsEnviado && sol.tsAutorizado ? new Date(sol.tsAutorizado) - new Date(sol.tsEnviado) : null
-  return (
-    <div style={{position:'fixed',inset:0,background:'#00000066',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
-      <div style={{background:'#fff',borderRadius:10,width:'100%',maxWidth:560,maxHeight:'90vh',overflowY:'auto',boxShadow:'0 16px 48px #0003'}}>
-        <div style={{background:C.red,borderRadius:'10px 10px 0 0',padding:'16px 20px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <div>
-            <div style={{fontWeight:800,fontSize:16,color:'#fff'}}>{sol.id}</div>
-            {sol.refCliente&&<div style={{fontSize:11,color:'rgba(255,255,255,0.8)',marginTop:2}}>{sol.refCliente}</div>}
-          </div>
-          <button onClick={onClose} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',borderRadius:4,padding:'4px 10px',cursor:'pointer',fontSize:16}}>×</button>
-        </div>
-        <div style={{padding:20}}>
-          <div style={{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap'}}>
-            <Badge estado={sol.estado}/>
-            {sol.auto&&<span style={{background:C.amberL,color:C.amber,borderRadius:10,padding:'2px 8px',fontSize:11,fontWeight:700}}>⚡ Procesado automáticamente</span>}
-            {durMs&&<span style={{background:C.greenL,color:C.green,borderRadius:10,padding:'2px 8px',fontSize:11,fontWeight:700}}>⏱️ {formatDuration(durMs)}</span>}
-          </div>
-          <FlowTracker estado={sol.estado}/>
-          {sol.motivo&&<div style={{background:C.redL,borderRadius:4,padding:'8px 12px',fontSize:12,color:C.red,marginTop:10}}>⚠️ {sol.motivo}</div>}
-          <div style={{height:1,background:C.border,margin:'14px 0'}}/>
-          {[
-            ['Operador', sol.operador],
-            ['Empresa contratista', sol.empresaNombre||sol.empresa||'—'],
-            ['Sitio', sol.sitio],
-            ['Tipo de trabajo', sol.trabajo],
-            ['Zona', sol.zona||'—'],
-            ['Fechas', `${sol.desde||'—'} → ${sol.hasta||'—'}`],
-            ['Correo mandante', sol.correoMandante||'—'],
-            ['Correo contratista', sol.correoContratista||'—'],
-          ].map(([l,v])=>(
-            <div key={l} style={{display:'flex',gap:10,paddingBottom:8,borderBottom:`1px solid ${C.gray2}`,marginBottom:8,fontSize:13}}>
-              <div style={{width:160,color:C.textS,flexShrink:0}}>{l}</div>
-              <div style={{fontWeight:500}}>{v}</div>
-            </div>
-          ))}
-          {sol.trabajadores?.length>0&&(
-            <div style={{marginTop:12}}>
-              <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>👷 Personal ({sol.trabajadores.length})</div>
-              {sol.trabajadores.map((t,i)=>(
-                <div key={i} style={{background:C.gray1,borderRadius:4,padding:'6px 10px',marginBottom:4,fontSize:12,display:'flex',justifyContent:'space-between'}}>
-                  <span>{t.nombre||'—'}</span><span style={{fontFamily:'monospace',color:C.textS}}>{t.rut||'—'}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {sol.historial?.length>0&&(
-            <div style={{marginTop:14}}>
-              <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>📋 Historial</div>
-              {sol.historial.map((h,i)=>(
-                <div key={i} style={{display:'flex',gap:10,paddingBottom:8,alignItems:'center'}}>
-                  <div style={{width:20,height:20,borderRadius:'50%',background:ESTADO_COLOR[h.estado]?.bg||C.gray4,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,color:'#fff',fontWeight:700,flexShrink:0}}>{i+1}</div>
-                  <div style={{flex:1}}><Badge estado={h.estado} small/>{h.auto&&<span style={{marginLeft:4,fontSize:10,color:C.amber}}>⚡ Auto</span>}</div>
-                  <div style={{fontSize:11,color:C.textS}}>{h.fecha}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ── FORMULARIO ────────────────────────────────────────────────
 function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, empresas, setEmpresas, alertas, showNotif, onBack, initialData }) {
