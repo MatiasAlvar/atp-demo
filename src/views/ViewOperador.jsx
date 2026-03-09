@@ -182,9 +182,7 @@ function SolRow({ s, onClick }) {
     </div>
   )
 }
-
-// ── DETALLE MODAL ─────────────────────────────────────────────
-function DetalleModal({ sol, onClose }) {
+) {
   const durMs = sol.tsEnviado && sol.tsAutorizado ? new Date(sol.tsAutorizado) - new Date(sol.tsEnviado) : null
   return (
     <div style={{position:'fixed',inset:0,background:'#00000066',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
