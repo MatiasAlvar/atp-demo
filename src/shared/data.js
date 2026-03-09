@@ -164,3 +164,15 @@ export function validarSolicitud(sol, solicitudes = []) {
 
   return errores.length === 0 ? {ok:true} : {ok:false, motivos:errores}
 }
+
+export const todayISO = () => new Date().toISOString().split('T')[0]
+
+export const EMPRESAS_DEFAULT = [
+  {rut:'76.124.890-1', nombre:'Lari Obras y Servicios SpA'},
+  {rut:'77.341.200-5', nombre:'TelcoServ SpA'},
+  {rut:'76.890.123-4', nombre:'Network Solutions Ltda.'},
+  {rut:'77.012.345-6', nombre:'Infratel SpA'},
+  {rut:'76.543.210-9', nombre:'TecnoAndes SpA'},
+  {rut:'76.222.333-1', nombre:'Torres & Redes Chile SpA'},
+  {rut:'77.888.999-0', nombre:'Telecomunicaciones del Sur Ltda.'},
+]
