@@ -1,5 +1,6 @@
 import emailjs from '@emailjs/browser'
 import { SITIOS, TRABAJO_INFORMAL } from '../shared/data.js'
+import { getSitiosConfig } from './supabase.js'
 
 const SERVICE_ID  = import.meta.env.VITE_EMAILJS_SERVICE_ID
 const TEMPLATE_ID = import.meta.env.VITE_EMAILJS_TEMPLATE_ID
@@ -8,13 +9,12 @@ const APP_URL     = import.meta.env.VITE_APP_URL || (typeof window !== 'undefine
 
 emailjs.init(PUBLIC_KEY)
 
-// Obtiene config del sitio: primero Supabase (vía cache en window), luego data.js
+// Obtiene config del sitio: primero Supabase, luego data.js
 async function getConfigSitio(sitioId) {
   try {
-    const { getSitiosConfig } = await import('./supabase.js')
     const configs = await getSitiosConfig()
-    if (configs[sitioId]) return configs[sitioId]
-  } catch {}
+    if (configs[sitioId]?.email || configs[sitioId]?.contacto) return configs[sitioId]
+  } catch(e) { console.warn('getConfigSitio error:', e) }
   return SITIOS.find(s => s.id === sitioId) || {}
 }
 

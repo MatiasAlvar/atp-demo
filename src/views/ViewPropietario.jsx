@@ -50,7 +50,11 @@ export default function ViewPropietario({ user, onLogout }) {
   async function handleDecision(solId, decision) {
     const nuevoEstado = decision === 'autorizar' ? 'Autorizado' : 'Rechazado'
     const sol = solicitudes.find(s => s.id === solId)
-    if (!sol) return
+    if (!sol) {
+      // Recargar y reintentar — puede ser que solicitudes aún no cargaron
+      await cargar()
+      return
+    }
     const tsAut = new Date().toISOString()
     const nuevoHistorial = [...(sol.historial || []), {
       estado: nuevoEstado,
@@ -71,8 +75,8 @@ export default function ViewPropietario({ user, onLogout }) {
     <div style={{minHeight:'100vh',background:'#F5F5F5',fontFamily:"'Segoe UI',Arial,sans-serif"}}>
       <GlobalStyle/>
 
-      {/* Modal de acción desde correo */}
-      {accion && !accion.done && (
+      {/* Modal de acción desde correo — solo si ya cargaron las solicitudes y existe la sol */}
+      {accion && !accion.done && !loading && solicitudes.find(s=>s.id===accion.id) && (
         <div style={{position:'fixed',inset:0,background:'#00000077',display:'flex',alignItems:'center',justifyContent:'center',zIndex:500,padding:20}}>
           <div style={{background:'#fff',borderRadius:12,padding:32,maxWidth:440,width:'100%',boxShadow:'0 20px 60px #0003',textAlign:'center'}}>
             {accion.tipo === 'autorizar' ? (
