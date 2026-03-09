@@ -51,13 +51,16 @@ export default function ViewATP({ user, onLogout }) {
     const sol = solicitudes.find(s=>s.id===id)
     if(!sol) return
     const hist = [...(sol.historial||[]),{estado:'Autorizado',fecha:new Date().toLocaleString('es-CL'),auto:false}]
-    await updateEstado(id,'Autorizado',{historial:hist, tsAutorizado:new Date().toISOString()})
+    const tsAut = new Date().toISOString()
+    // Optimistic update — actualizar UI inmediatamente sin esperar DB
+    setSolicitudes(prev => prev.map(s => s.id===id ? {...s,estado:'Autorizado',historial:hist,tsAutorizado:tsAut} : s))
+    await updateEstado(id,'Autorizado',{historial:hist, tsAutorizado:tsAut})
     try {
       const { enviarCorreoAutorizacion } = await import('../lib/email.js')
-      await enviarCorreoAutorizacion({ solicitud:{...sol,estado:'Autorizado'} })
+      await enviarCorreoAutorizacion({ solicitud:{...sol,estado:'Autorizado',tsAutorizado:tsAut} })
     } catch(e){ console.error('email error',e) }
     showNotif('✅ Acceso autorizado — correo enviado a mandante y contratista')
-    await cargar()
+    setTimeout(cargar, 1500) // refrescar después de que Supabase confirme
   }
 
   const gestPend  = solicitudes.filter(s=>['Validado','En Gestión Propietario'].includes(s.estado)).length

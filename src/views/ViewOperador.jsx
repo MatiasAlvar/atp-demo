@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { supabase, getSolicitudes, upsertSolicitud, fromDb, getAlertas, getTrabajadores, getEmpresas, upsertEmpresa } from '../lib/supabase.js'
+import { supabase, getSolicitudes, upsertSolicitud, fromDb, getAlertas, getTrabajadores, getEmpresas, upsertEmpresa, upsertTrabajador } from '../lib/supabase.js'
 import { SITIOS, COLOCALIZACIONES, EMPRESAS_DEFAULT, TIPOS_TRABAJO, VENTANA_MAX, TRABAJO_INFORMAL, ZONAS, ESTADO_COLOR, C, OP_COLOR, OP_SHORT, validarSolicitud, daysBetween, nextId, formatRUT, validRUT } from '../shared/data.js'
 import { ATPLogo, Badge, AutoPill, FlowTracker, SolicitudCard, DetalleModal, Notif, GlobalStyle } from '../shared/components.jsx'
 import { enviarCorreoPropietario } from '../lib/email.js'
@@ -306,6 +306,30 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
         await enviarCorreoPropietario({ solicitud: sol, sitio })
       } catch(e) { console.error('Email error:', e) }
     }
+    // Auto-registrar trabajadores nuevos (no están en BBDD)
+    try {
+      for (const t of trab) {
+        const yaExiste = trabajadores.some(w => w.rut === t.rut)
+        if (!yaExiste && validRUT(t.rut) && t.nombre) {
+          const nuevo = {
+            id: 'trab-' + t.rut.replace(/[^0-9kK]/g,''),
+            rut: t.rut,
+            nombre: t.nombre,
+            empresa_nombre: form.empresaNombre || '',
+            operador: user.operador,
+            acreditado: null, // pendiente de acreditación
+            vencimiento: '',
+            motivo_no_acreditado: 'Pendiente revisión',
+          }
+          await upsertTrabajador(nuevo)
+          setTrabajadores(prev => {
+            if (prev.some(w => w.rut === t.rut)) return prev
+            return [...prev, nuevo]
+          })
+        }
+      }
+    } catch(e){ console.error('auto-register worker:', e) }
+
     await upsertSolicitud(sol)
     setSolicitudes(s => [sol, ...s])
     setResult(v)

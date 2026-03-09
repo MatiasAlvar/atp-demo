@@ -51,14 +51,24 @@ export default function ViewPropietario({ user, onLogout }) {
     const nuevoEstado = decision === 'autorizar' ? 'Autorizado' : 'Rechazado'
     const sol = solicitudes.find(s => s.id === solId)
     if (!sol) return
+    const tsAut = new Date().toISOString()
     const nuevoHistorial = [...(sol.historial || []), {
       estado: nuevoEstado,
       fecha: new Date().toLocaleString('es-CL'),
       auto: false,
     }]
-    await updateEstado(solId, nuevoEstado, { historial: nuevoHistorial })
+    // Optimistic update
+    setSolicitudes(prev => prev.map(s => s.id===solId ? {...s, estado:nuevoEstado, historial:nuevoHistorial} : s))
+    await updateEstado(solId, nuevoEstado, { historial: nuevoHistorial, tsAutorizado: nuevoEstado==='Autorizado'?tsAut:undefined })
+    // Enviar correo si es autorización
+    if (nuevoEstado === 'Autorizado') {
+      try {
+        const { enviarCorreoAutorizacion } = await import('../lib/email.js')
+        await enviarCorreoAutorizacion({ solicitud:{...sol, estado:'Autorizado', tsAutorizado:tsAut} })
+      } catch(e){ console.error('email autorización propietario:', e) }
+    }
     setAccion({ id: solId, tipo: decision, done: true })
-    await cargar()
+    setTimeout(cargar, 1500)
   }
 
   const pendientes  = solicitudes.filter(s => s.estado === 'En Gestión Propietario')
