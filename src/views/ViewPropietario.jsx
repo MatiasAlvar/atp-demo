@@ -7,6 +7,8 @@ export default function ViewPropietario({ user, onLogout }) {
   const [solicitudes, setSolicitudes] = useState([])
   const [loading, setLoading]         = useState(true)
   const [accion, setAccion]           = useState(null) // {id, tipo}
+  const [motivoModal, setMotivoModal] = useState(null) // {solId} — modal para motivo de rechazo
+  const [motivoTexto, setMotivoTexto] = useState('')
 
   // Cargar solicitudes de los sitios del propietario
   async function cargar() {
@@ -59,7 +61,7 @@ export default function ViewPropietario({ user, onLogout }) {
     }
   }, [])
 
-  async function handleDecision(solId, decision) {
+  async function handleDecision(solId, decision, motivo='') {
     const nuevoEstado = decision === 'autorizar' ? 'Autorizado' : 'Rechazado'
     const sol = solicitudes.find(s => s.id === solId)
     if (!sol) { await cargar(); return }
@@ -72,7 +74,10 @@ export default function ViewPropietario({ user, onLogout }) {
     // 1) Optimistic update inmediato
     setSolicitudes(prev => prev.map(s => s.id===solId ? {...s, estado:nuevoEstado, historial:nuevoHistorial} : s))
     // 2) Guardar en DB
-    await updateEstado(solId, nuevoEstado, { historial: nuevoHistorial })
+    await updateEstado(solId, nuevoEstado, {
+      historial: nuevoHistorial,
+      ...(nuevoEstado === 'Rechazado' && motivo ? { motivo_rechazo: motivo } : {})
+    })
     setAccion({ id: solId, tipo: decision, done: true })
     // 3) Confirmar desde DB a los 2s para sincronizar
     setTimeout(async () => {
@@ -87,6 +92,69 @@ export default function ViewPropietario({ user, onLogout }) {
   return (
     <div style={{minHeight:'100vh',background:'#F5F5F5',fontFamily:"'Segoe UI',Arial,sans-serif"}}>
       <GlobalStyle/>
+
+  {/* Modal motivo de rechazo */}
+      {motivoModal && (
+        <div style={{position:'fixed',inset:0,background:'#00000077',display:'flex',alignItems:'center',justifyContent:'center',zIndex:600,padding:20}}>
+          <div style={{background:'#fff',borderRadius:12,padding:32,maxWidth:440,width:'100%',boxShadow:'0 20px 60px #0003'}}>
+            <div style={{fontSize:40,marginBottom:10,textAlign:'center'}}>🚫</div>
+            <div style={{fontWeight:700,fontSize:18,marginBottom:8,textAlign:'center'}}>Indicar motivo de rechazo</div>
+            <p style={{color:'#666',fontSize:14,margin:'0 0 16px',textAlign:'center'}}>Es obligatorio indicar el motivo. ATP Chile será notificado para gestionar la situación.</p>
+            <textarea
+              value={motivoTexto}
+              onChange={e=>setMotivoTexto(e.target.value)}
+              placeholder="Ej: El sitio tiene una falla eléctrica no resuelta, no es posible recibir visitas hasta el 15 de abril..."
+              rows={4}
+              style={{width:'100%',border:`2px solid ${motivoTexto.trim().length>0?'#E53935':'#ccc'}`,borderRadius:6,padding:'10px 12px',fontSize:13,fontFamily:'inherit',resize:'vertical',boxSizing:'border-box'}}
+            />
+            {motivoTexto.trim().length === 0 && <div style={{fontSize:11,color:'#E53935',marginTop:4}}>⚠️ El motivo es obligatorio para rechazar</div>}
+            <div style={{display:'flex',gap:10,marginTop:16}}>
+              <button
+                disabled={motivoTexto.trim().length===0}
+                onClick={()=>{
+                  handleDecision(motivoModal.solId,'rechazar',motivoTexto.trim())
+                  setMotivoModal(null); setMotivoTexto('')
+                }}
+                style={{flex:1,background:motivoTexto.trim().length>0?'#E53935':'#ccc',color:'#fff',border:'none',borderRadius:6,padding:'11px 0',fontWeight:700,fontSize:14,cursor:motivoTexto.trim().length>0?'pointer':'not-allowed'}}
+              >Confirmar rechazo</button>
+              <button onClick={()=>{setMotivoModal(null);setMotivoTexto('')}} style={{flex:1,background:'transparent',border:'1px solid #ccc',borderRadius:6,padding:'11px 0',cursor:'pointer'}}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal motivo de rechazo — obligatorio */}
+      {motivoModal && (
+        <div style={{position:'fixed',inset:0,background:'#00000077',display:'flex',alignItems:'center',justifyContent:'center',zIndex:600,padding:20}}>
+          <div style={{background:'#fff',borderRadius:12,padding:32,maxWidth:460,width:'100%',boxShadow:'0 20px 60px #0003'}}>
+            <div style={{fontSize:40,marginBottom:12,textAlign:'center'}}>🚫</div>
+            <div style={{fontWeight:700,fontSize:18,marginBottom:8,textAlign:'center'}}>Rechazar acceso</div>
+            <p style={{color:'#666',fontSize:14,margin:'0 0 18px',textAlign:'center'}}>Para rechazar, debes indicar el motivo. Esta información llegará a ATP Chile para que puedan contactarte.</p>
+            <label style={{display:'block',fontSize:12,fontWeight:700,color:'#444',marginBottom:6}}>Motivo del rechazo <span style={{color:'#E53935'}}>*</span></label>
+            <textarea
+              value={motivoTexto}
+              onChange={e=>setMotivoTexto(e.target.value)}
+              placeholder="Ej: El sitio está en mantención, No se permite acceso los fines de semana, Contrato vencido..."
+              rows={4}
+              style={{width:'100%',border:`2px solid ${motivoTexto.trim().length>5?'#4CAF50':'#E0E0E0'}`,borderRadius:6,padding:'10px 12px',fontSize:13,resize:'vertical',fontFamily:'inherit',transition:'border 0.2s',boxSizing:'border-box'}}
+            />
+            <div style={{fontSize:11,color:'#999',marginBottom:18,marginTop:4}}>{motivoTexto.trim().length}/200 caracteres mínimo 10</div>
+            <div style={{display:'flex',gap:10}}>
+              <button
+                onClick={async ()=>{
+                  if(motivoTexto.trim().length < 10) return
+                  await handleDecision(motivoModal.solId, 'rechazar', motivoTexto.trim())
+                  setMotivoModal(null)
+                  setMotivoTexto('')
+                }}
+                disabled={motivoTexto.trim().length < 10}
+                style={{flex:1,background:motivoTexto.trim().length>=10?'#E53935':'#ccc',color:'#fff',border:'none',borderRadius:6,padding:'12px 0',fontWeight:700,fontSize:14,cursor:motivoTexto.trim().length>=10?'pointer':'not-allowed'}}
+              >✗ Confirmar rechazo</button>
+              <button onClick={()=>{setMotivoModal(null);setMotivoTexto('')}} style={{flex:1,background:'transparent',border:'1px solid #E0E0E0',borderRadius:6,padding:'12px 0',cursor:'pointer',fontSize:14,color:'#666'}}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de acción desde correo — solo si ya cargaron las solicitudes y existe la sol */}
       {accion && !accion.done && !loading && solicitudes.find(s=>s.id===accion.id) && (
@@ -108,7 +176,7 @@ export default function ViewPropietario({ user, onLogout }) {
                 <div style={{fontWeight:700,fontSize:18,marginBottom:8}}>Rechazar acceso</div>
                 <p style={{color:C.textS,fontSize:14,margin:'0 0 20px'}}>¿Confirmas que <strong>NO autorizas</strong> el acceso para la solicitud <strong>{accion.id}</strong>?</p>
                 <div style={{display:'flex',gap:10,justifyContent:'center'}}>
-                  <button onClick={()=>handleDecision(accion.id,'rechazar')} style={{background:C.red,color:'#fff',border:'none',borderRadius:6,padding:'11px 28px',fontWeight:700,fontSize:14,cursor:'pointer'}}>✗ No autorizo</button>
+                  <button onClick={()=>{setAccion(null);setMotivoModal({solId:accion.id})}} style={{background:C.red,color:'#fff',border:'none',borderRadius:6,padding:'11px 28px',fontWeight:700,fontSize:14,cursor:'pointer'}}>✗ No autorizo</button>
                   <button onClick={()=>setAccion(null)} style={{background:'transparent',color:C.textS,border:`1px solid ${C.border}`,borderRadius:6,padding:'11px 16px',cursor:'pointer'}}>Cancelar</button>
                 </div>
               </>
@@ -172,7 +240,7 @@ export default function ViewPropietario({ user, onLogout }) {
               <div style={{width:10,height:10,borderRadius:'50%',background:C.orange}}/>
               <span style={{fontWeight:700,fontSize:16}}>Esperando tu respuesta ({pendientes.length})</span>
             </div>
-            {pendientes.map(s => <SolCardPropietario key={s.id} s={s} onDecision={handleDecision}/>)}
+            {pendientes.map(s => <SolCardPropietario key={s.id} s={s} onDecision={handleDecision} onRechazar={solId=>setMotivoModal({solId})}/>)}
           </div>
         )}
 
@@ -196,7 +264,7 @@ export default function ViewPropietario({ user, onLogout }) {
   )
 }
 
-function SolCardPropietario({ s, onDecision, resuelta }) {
+function SolCardPropietario({ s, onDecision, onRechazar, resuelta }) {
   const sitio = SITIOS.find(x => x.id === s.sitio)
   const desc  = TRABAJO_INFORMAL[s.trabajo] || s.trabajo
 
@@ -248,15 +316,18 @@ function SolCardPropietario({ s, onDecision, resuelta }) {
           <button onClick={()=>onDecision(s.id,'autorizar')} style={{flex:1,background:C.green,color:'#fff',border:'none',borderRadius:6,padding:'12px 0',fontWeight:700,fontSize:14,cursor:'pointer'}}>
             ✓ Autorizo el acceso
           </button>
-          <button onClick={()=>onDecision(s.id,'rechazar')} style={{flex:1,background:'transparent',color:C.red,border:`2px solid ${C.red}`,borderRadius:6,padding:'12px 0',fontWeight:700,fontSize:14,cursor:'pointer'}}>
+          <button onClick={()=>onRechazar(s.id)} style={{flex:1,background:'transparent',color:C.red,border:`2px solid ${C.red}`,borderRadius:6,padding:'12px 0',fontWeight:700,fontSize:14,cursor:'pointer'}}>
             ✗ No autorizo
           </button>
         </div>
       )}
 
       {resuelta && (
-        <div style={{marginTop:12,fontSize:12,color:s.estado==='Autorizado'?C.green:C.red,fontWeight:600}}>
-          {s.estado==='Autorizado' ? '✅ Autorizaste este acceso' : '🚫 Rechazaste este acceso'}
+        <div style={{marginTop:12}}>
+          <div style={{fontSize:12,color:s.estado==='Autorizado'?C.green:C.red,fontWeight:600}}>
+            {s.estado==='Autorizado' ? '✅ Autorizaste este acceso' : '🚫 Rechazaste este acceso'}
+          </div>
+          {s.motivoRechazo && <div style={{marginTop:6,fontSize:12,background:'#FFF3F3',border:'1px solid #FFCDD2',borderRadius:4,padding:'6px 10px',color:'#B71C1C'}}>💬 Motivo: {s.motivoRechazo}</div>}
         </div>
       )}
     </div>

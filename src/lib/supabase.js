@@ -113,6 +113,7 @@ function toDb(sol) {
     historial: sol.historial || [],
     ts_enviado: sol.tsEnviado || null,
     ts_autorizado: sol.tsAutorizado || null,
+    motivo_rechazo: sol.motivoRechazo || '',
   }
 }
 
@@ -137,6 +138,7 @@ export function fromDb(row) {
     historial: row.historial || [],
     tsEnviado: row.ts_enviado || '',
     tsAutorizado: row.ts_autorizado || '',
+    motivoRechazo: row.motivo_rechazo || '',
   }
 }
 
@@ -149,6 +151,20 @@ export async function getSitiosConfig() {
 
 export async function upsertSitioConfig(cfg) {
   const { error } = await supabase.from('sitios_config').upsert(cfg, { onConflict: 'sitio_id' })
+  if (error) console.error(error)
+  return !error
+}
+
+// ── REGLAS POR SITIO ─────────────────────────────────────────
+export async function getReglasSitios() {
+  const { data, error } = await supabase.from('reglas_sitios').select('*')
+  if (error) { console.error(error); return {} }
+  return Object.fromEntries((data||[]).map(r => [r.sitio_id, r]))
+}
+
+export async function upsertReglaSitio(regla) {
+  const { error } = await supabase.from('reglas_sitios')
+    .upsert({ ...regla, updated_at: new Date().toISOString() }, { onConflict: 'sitio_id' })
   if (error) console.error(error)
   return !error
 }

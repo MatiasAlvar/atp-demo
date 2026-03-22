@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { supabase, getSolicitudes, upsertSolicitud, fromDb, getAlertas, getTrabajadores, getEmpresas, upsertEmpresa, upsertTrabajador } from '../lib/supabase.js'
+import { supabase, getSolicitudes, upsertSolicitud, fromDb, getAlertas, getTrabajadores, getEmpresas, upsertEmpresa, upsertTrabajador, getSitiosConfig, getReglasSitios } from '../lib/supabase.js'
 import { SITIOS, COLOCALIZACIONES, EMPRESAS_DEFAULT, TIPOS_TRABAJO, VENTANA_MAX, TRABAJO_INFORMAL, ZONAS, ESTADO_COLOR, C, OP_COLOR, OP_SHORT, validarSolicitud, daysBetween, nextId, formatRUT, validRUT } from '../shared/data.js'
 import { ATPLogo, Badge, AutoPill, FlowTracker, SolicitudCard, DetalleModal, Notif, GlobalStyle } from '../shared/components.jsx'
 import { enviarCorreoPropietario } from '../lib/email.js'
@@ -30,14 +30,21 @@ export default function ViewOperador({ user, onLogout }) {
   const [trabajadores, setTrabajadores] = useState([])
   const [empresas, setEmpresas]     = useState([])
   const [alertas, setAlertas]       = useState([])
+  const [reglas, setReglas]         = useState({})
+  const [sitiosConfig, setSitiosConfig] = useState({})
 
   function showNotif(msg, type='success') { setNotif({msg,type}); setTimeout(()=>setNotif(null),5000) }
 
   async function cargar() {
-    const [data, trabs, emps] = await Promise.all([getSolicitudes(), getTrabajadores(), getEmpresas()])
+    const [data, trabs, emps, reglasData, sitiosCfg] = await Promise.all([
+      getSolicitudes(), getTrabajadores(), getEmpresas(),
+      getReglasSitios(), getSitiosConfig()
+    ])
     setSolicitudes(data.map(fromDb).filter(s => s.operador === user.operador))
     setTrabajadores(trabs)
     setEmpresas(emps)
+    setReglas(reglasData)
+    setSitiosConfig(sitiosCfg)
     setLoading(false)
   }
 
@@ -153,7 +160,7 @@ export default function ViewOperador({ user, onLogout }) {
             <FormNuevaSolicitud
               user={user} solicitudes={solicitudes} setSolicitudes={setSolicitudes}
               trabajadores={trabajadores} empresas={empresas} setEmpresas={setEmpresas}
-              alertas={alertas}
+              alertas={alertas} reglas={reglas} sitiosConfig={sitiosConfig}
               showNotif={showNotif} onBack={()=>{setView('lista');setPreFilledData(null)}}
               initialData={preFilledData}
             />
@@ -197,7 +204,7 @@ function SolRow({ s, onClick }) {
 }
 
 // ── FORMULARIO ────────────────────────────────────────────────
-function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, empresas, setEmpresas, alertas, showNotif, onBack, initialData }) {
+function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, empresas, setEmpresas, alertas, reglas, sitiosConfig, showNotif, onBack, initialData }) {
   const [form, setForm] = useState({
     operador: user.operador,
     empresa: initialData?.rut_empresa || '',
@@ -237,8 +244,41 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
 
   function handleSitioChange(sitioId) {
     set('sitio', sitioId)
+    // Alerta de alertas table
     const alerta = alertas.find(a => a.sitio_id === sitioId && a.estado === 'activo')
-    if (alerta) { setAlertaSitio(alerta); setShowAlerta(true) }
+    if (alerta) { setAlertaSitio(alerta); setShowAlerta(true); return }
+    // Alerta contractual desde sitios_config
+    const cfg = sitiosConfig[sitioId]
+    if (cfg?.alerta_texto) {
+      setAlertaSitio({ titulo: '⚠️ Observación contractual', descripcion: cfg.alerta_texto })
+      setShowAlerta(true)
+    }
+  }
+
+  // Validar fechas contra reglas del sitio
+  function validarFechasConReglas(desde, hasta, sitioId) {
+    const regla = reglas[sitioId]
+    if (!regla || (!regla.no_fines_semana && !regla.solo_dias_habiles && !regla.hora_inicio)) return null
+
+    const FERIADOS_CL_2026 = ['2026-01-01','2026-04-03','2026-04-04','2026-05-01','2026-05-21','2026-06-29','2026-07-16','2026-08-15','2026-09-18','2026-09-19','2026-10-12','2026-10-31','2026-11-01','2026-12-08','2026-12-25']
+
+    if (regla.no_fines_semana || regla.solo_dias_habiles) {
+      const d = new Date(desde + 'T12:00:00')
+      const h = new Date(hasta + 'T12:00:00')
+      const dias = []
+      for (let dt = new Date(d); dt <= h; dt.setDate(dt.getDate()+1)) {
+        dias.push(new Date(dt))
+      }
+      for (const dia of dias) {
+        const dow = dia.getDay()
+        const iso = dia.toISOString().split('T')[0]
+        if (regla.no_fines_semana && (dow === 0 || dow === 6))
+          return `Este sitio no permite acceso los fines de semana. Selecciona fechas de lunes a viernes.`
+        if (regla.solo_dias_habiles && FERIADOS_CL_2026.includes(iso))
+          return `El ${iso} es feriado. Este sitio solo permite acceso en días hábiles.`
+      }
+    }
+    return null
   }
 
   function handleTrabajadorRUT(i, raw) {
@@ -275,6 +315,11 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
     if (noAcred) {
       showNotif(`❌ ${noAcred.nombre || noAcred.rut} no está acreditado. No se puede enviar la solicitud.`, 'error')
       return
+    }
+    // Validar reglas del sitio
+    if (form.desde && form.hasta && form.sitio) {
+      const reglaError = validarFechasConReglas(form.desde, form.hasta, form.sitio)
+      if (reglaError) { showNotif(`❌ ${reglaError}`, 'error'); return }
     }
     setSubmitting(true)
     await new Promise(r => setTimeout(r, 1200))
@@ -451,6 +496,20 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
             <div><label style={lbl}>Fecha inicio <span style={{color:C.red}}>*</span></label><input type="date" min={new Date().toISOString().split("T")[0]} value={form.desde} onChange={e=>set('desde',e.target.value)} style={inp}/></div>
             <div><label style={lbl}>Fecha fin <span style={{color:C.red}}>*</span></label><input type="date" min={form.desde||new Date().toISOString().split("T")[0]} value={form.hasta} onChange={e=>set('hasta',e.target.value)} style={inp}/></div>
           </div>
+          {/* Aviso inline de reglas del sitio */}
+          {form.desde && form.hasta && form.sitio && (() => {
+            const err = validarFechasConReglas(form.desde, form.hasta, form.sitio)
+            const regla = reglas[form.sitio]
+            return err ? (
+              <div style={{background:'#FFF3E0',border:'1px solid #FFB74D',borderRadius:4,padding:'8px 12px',fontSize:12,color:'#E65100',marginBottom:10}}>
+                ⛔ {err}
+              </div>
+            ) : regla && (regla.no_fines_semana || regla.solo_dias_habiles) ? (
+              <div style={{background:'#E8F5E9',border:'1px solid #A5D6A7',borderRadius:4,padding:'8px 12px',fontSize:12,color:'#1B5E20',marginBottom:10}}>
+                ✅ Fechas válidas según las reglas de este sitio
+              </div>
+            ) : null
+          })()}
           <div style={{marginBottom:10}}>
             <label style={lbl}>Tipo de trabajo <span style={{color:C.red}}>*</span></label>
             <select value={form.trabajo} onChange={e=>set('trabajo',e.target.value)} style={{...inp,color:form.trabajo?C.text:C.gray4}}>
@@ -582,25 +641,89 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
 }
 
 // ── TAB IA ────────────────────────────────────────────────────
-function TabIA({ apiKey, onPreFill, showNotif }) {
-  const [file, setFile]         = useState(null)
-  const [fileType, setFileType] = useState(null)
-  const [parsing, setParsing]   = useState(false)
-  const [parseStep, setParseStep] = useState(0)
-  const [parsed, setParsed]     = useState(null)
-  const [error, setError]       = useState(null)
-  const fileRef = useRef()
-  const steps = ['Leyendo estructura del archivo...','Identificando personal y RUTs...','Detectando empresa contratista...','Extrayendo sitio y fechas...','Completando campos...']
+const TIPOS_DOC = [
+  { id: 'orden_trabajo', label: 'Orden de Trabajo / Permiso de Acceso', ext: ['pdf','png','jpg','jpeg','xlsx','xls','csv'], keywords: ['orden','trabajo','permiso','acceso','técnico','sitio','contratista'] },
+  { id: 'cdt', label: 'Contrato de Trabajo (CDT)', ext: ['pdf'], keywords: ['contrato','trabajo','empleado','sueldo','remuneración','cdt','jornada'] },
+  { id: 'acreditacion', label: 'Certificado de Acreditación', ext: ['pdf','png','jpg','jpeg'], keywords: ['acreditación','certificado','capacitación','altura','seguridad'] },
+  { id: 'cualquiera', label: 'Cualquier documento (solo extracción)', ext: ['pdf','png','jpg','jpeg','xlsx','xls','csv'], keywords: [] },
+]
 
-  function handleFile(f) { if(!f)return; setFile(f); setFileType(f.name.split('.').pop().toLowerCase()); setParsed(null); setError(null) }
+function TabIA({ apiKey, onPreFill, showNotif }) {
+  const [file, setFile]               = useState(null)
+  const [fileType, setFileType]       = useState(null)
+  const [parsing, setParsing]         = useState(false)
+  const [parseStep, setParseStep]     = useState(0)
+  const [parsed, setParsed]           = useState(null)
+  const [error, setError]             = useState(null)
+  const [tipoRequerido, setTipoRequerido] = useState('orden_trabajo')
+  const [validacionDoc, setValidacionDoc] = useState(null) // {ok, tipo_detectado, mensaje}
+  const fileRef = useRef()
+  const steps = ['Verificando tipo de documento...','Leyendo estructura del archivo...','Identificando personal y RUTs...','Detectando empresa contratista...','Extrayendo sitio y fechas...']
+
+  function handleFile(f) {
+    if(!f) return
+    setFile(f); setFileType(f.name.split('.').pop().toLowerCase())
+    setParsed(null); setError(null); setValidacionDoc(null)
+  }
 
   async function handleParse() {
     if (!file || !apiKey) { setError(!apiKey ? 'Configura tu API key (botón IA en la barra superior)' : 'Selecciona un archivo'); return }
-    setParsing(true); setError(null); setParsed(null); setParseStep(0)
+    const tipoDoc = TIPOS_DOC.find(t => t.id === tipoRequerido)
+    // Validar extensión
+    if (tipoDoc && tipoDoc.id !== 'cualquiera' && !tipoDoc.ext.includes(fileType)) {
+      setError(`❌ El tipo de documento "${tipoDoc.label}" no acepta archivos .${fileType}. Formatos válidos: ${tipoDoc.ext.join(', ')}`)
+      return
+    }
+    setParsing(true); setError(null); setParsed(null); setValidacionDoc(null); setParseStep(0)
     const si = setInterval(() => setParseStep(s => Math.min(s+1, steps.length-1)), 900)
     try {
       const base64 = await new Promise((res,rej) => { const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(file) })
       const sitiosInfo = SITIOS.map(s=>`${s.id}: ${s.nombre} (${s.regionLabel})`).join('\n')
+
+      // ── PASO 1: Validar tipo de documento (si no es "cualquiera") ──
+      if (tipoDoc && tipoDoc.id !== 'cualquiera') {
+        const validPrompt = `Analiza este documento y responde SOLO con JSON sin markdown:
+{
+  "es_tipo_correcto": true/false,
+  "tipo_detectado": "descripción breve de qué tipo de documento es",
+  "confianza": "alta|media|baja",
+  "razon": "explicación breve de por qué sí o no corresponde"
+}
+
+El documento DEBE SER: "${tipoDoc.label}"
+Palabras clave esperadas: ${tipoDoc.keywords.join(', ')}
+
+Sé estricto: si el documento claramente no corresponde al tipo requerido, devuelve es_tipo_correcto: false.`
+
+        let valMessages
+        const mt = file.type || 'application/octet-stream'
+        if (['pdf'].includes(fileType)) {
+          valMessages=[{role:'user',content:[{type:'document',source:{type:'base64',media_type:'application/pdf',data:base64}},{type:'text',text:validPrompt}]}]
+        } else if (['png','jpg','jpeg','webp'].includes(fileType)) {
+          valMessages=[{role:'user',content:[{type:'image',source:{type:'base64',media_type:mt.startsWith('image/')?mt:'image/jpeg',data:base64}},{type:'text',text:validPrompt}]}]
+        } else {
+          // Para Excel/CSV, saltamos la validación de tipo
+          valMessages = null
+        }
+        if (valMessages) {
+          const valRes = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:400,messages:valMessages})})
+          const valData = await valRes.json()
+          if (!valData.error) {
+            const valRaw = valData.content.map(b=>b.text||'').join('').replace(/```json|```/g,'').trim()
+            try {
+              const valJson = JSON.parse(valRaw)
+              setValidacionDoc(valJson)
+              if (!valJson.es_tipo_correcto) {
+                clearInterval(si); setParsing(false)
+                setError(`❌ Documento incorrecto: se esperaba "${tipoDoc.label}" pero se detectó "${valJson.tipo_detectado}". ${valJson.razon}`)
+                return
+              }
+            } catch {}
+          }
+        }
+      }
+
+      // ── PASO 2: Extraer datos ──
       const prompt = `Eres un experto extractor de datos para el sistema ATP Chile de acceso a torres de telecomunicaciones.
 Del archivo adjunto extrae TODOS los campos posibles. IMPORTANTE: extrae TODOS los técnicos/trabajadores que encuentres, no solo el primero.
 
@@ -682,6 +805,21 @@ Reglas críticas:
     <div style={{animation:'fadeIn 0.3s ease'}}>
       <h2 style={{margin:'0 0 4px',fontSize:18,fontWeight:700}}>Carga con Inteligencia Artificial</h2>
       <p style={{color:C.textS,fontSize:13,margin:'0 0 16px'}}>Sube una orden de trabajo o Excel y la IA pre-llena el formulario automáticamente.</p>
+
+      {/* Selector tipo de documento requerido */}
+      <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:14,marginBottom:14}}>
+        <div style={{fontSize:12,fontWeight:700,color:C.text,marginBottom:8}}>📋 ¿Qué tipo de documento vas a subir?</div>
+        <div style={{display:'flex',flexDirection:'column',gap:6}}>
+          {TIPOS_DOC.map(t=>(
+            <label key={t.id} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',padding:'6px 10px',borderRadius:4,background:tipoRequerido===t.id?'#FFF3F3':C.gray1,border:`1px solid ${tipoRequerido===t.id?C.red:C.border}`}}>
+              <input type="radio" name="tipoDoc" value={t.id} checked={tipoRequerido===t.id} onChange={()=>setTipoRequerido(t.id)} style={{accentColor:C.red}}/>
+              <span style={{fontSize:13,fontWeight:tipoRequerido===t.id?700:400,color:tipoRequerido===t.id?C.red:C.text}}>{t.label}</span>
+              <span style={{marginLeft:'auto',fontSize:10,color:C.textS}}>{t.ext.join(', ')}</span>
+            </label>
+          ))}
+        </div>
+        {tipoRequerido !== 'cualquiera' && <div style={{marginTop:8,fontSize:11,color:C.textS,background:C.gray1,borderRadius:4,padding:'5px 10px'}}>🔍 La IA verificará que el archivo corresponda a este tipo antes de extraer los datos</div>}
+      </div>
       <div onClick={()=>fileRef.current?.click()} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();handleFile(e.dataTransfer.files[0])}} style={{border:`2px dashed ${file?C.red:C.border}`,borderRadius:8,padding:'28px 24px',textAlign:'center',cursor:'pointer',background:file?'#FFF8F8':'#FAFAFA',marginBottom:14}}>
         <input ref={fileRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv" style={{display:'none'}} onChange={e=>handleFile(e.target.files[0])}/>
         {file ? <div><div style={{fontSize:32,marginBottom:6}}>{['xlsx','xls','csv'].includes(fileType)?'📊':fileType==='pdf'?'📄':'🖼️'}</div><div style={{color:C.red,fontWeight:700}}>{file.name}</div><div style={{fontSize:11,color:C.textS,marginTop:3}}>{(file.size/1024).toFixed(0)} KB</div></div>
