@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import * as XLSX from 'xlsx'
-import { supabase, getSolicitudes, updateEstado, getAlertas, upsertAlerta, resolverAlerta, getTrabajadores, upsertTrabajador, deleteTrabajador, getEmpresas, upsertEmpresa, getSitiosConfig, upsertSitioConfig, fromDb } from '../lib/supabase.js'
+import { supabase, getSolicitudes, updateEstado, getAlertas, upsertAlerta, resolverAlerta, getTrabajadores, upsertTrabajador, deleteTrabajador, getEmpresas, upsertEmpresa, getSitiosConfig, upsertSitioConfig, fromDb, getReglasSitios, upsertReglaSitio, getDocMensual, saveDocMensual } from '../lib/supabase.js'
 import { enviarCorreoPropietario } from '../lib/email.js'
-import { SITIOS, COLOCALIZACIONES, TIPOS_TRABAJO, VENTANA_MAX, TRABAJO_INFORMAL, ESTADOS, ESTADO_COLOR, C, OP_COLOR, OP_SHORT, OPERADORES, daysBetween, formatRUT, validRUT, todayISO } from '../shared/data.js'
+import { SITIOS, SITIOS_EXTRA, TODOS_SITIOS, COLOCALIZACIONES, TIPOS_TRABAJO, VENTANA_MAX, TRABAJO_INFORMAL, ESTADOS, ESTADO_COLOR, C, OP_COLOR, OP_SHORT, OPERADORES, daysBetween, formatRUT, validRUT, todayISO, TIPOS_DOCS_SITIO } from '../shared/data.js'
 import { ATPLogo, Badge, AutoPill, FlowTracker, KpiCard, Notif, GlobalStyle } from '../shared/components.jsx'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid, Legend } from 'recharts'
 
@@ -28,15 +28,18 @@ export default function ViewATP({ user, onLogout }) {
   const [detalleSol, setDetalleSol] = useState(null)
   const [filterEst, setFilterEst]  = useState('')
   const [filterOp, setFilterOp]    = useState('')
+  const [reglas, setReglas]        = useState({})
+  const [docMensual, setDocMensual] = useState(()=>getDocMensual())
 
   function showNotif(msg,type='success'){setNotif({msg,type});setTimeout(()=>setNotif(null),5000)}
 
   async function cargar() {
-    const [sols, alts, trabs, emps] = await Promise.all([getSolicitudes(), getAlertas(), getTrabajadores(), getEmpresas()])
+    const [sols, alts, trabs, emps, reglasData] = await Promise.all([getSolicitudes(), getAlertas(), getTrabajadores(), getEmpresas(), getReglasSitios()])
     setSolicitudes(sols.map(fromDb))
     setAlertas(alts)
     setTrabajadores(trabs)
     setEmpresas(emps)
+    setReglas(reglasData)
     setLoading(false)
   }
 
@@ -77,6 +80,8 @@ export default function ViewATP({ user, onLogout }) {
     {id:'reporteria', icon:'📥', label:'Reportería'},
     {id:'trabajadores',icon:'👷',label:'Trabajadores'},
     {id:'reglas',     icon:'⚙️', label:'Reglas del Motor'},
+    {id:'docmensual', icon:'📋', label:'Doc. Autorización'},
+    {id:'whatsapp',   icon:'💬', label:'WhatsApp IA'},
   ]
 
   return (
@@ -125,7 +130,9 @@ export default function ViewATP({ user, onLogout }) {
           {!loading&&view==='colos'&&<TabColocalizaciones/>}
           {!loading&&view==='reporteria'&&<TabReporteria solicitudes={solicitudes} trabajadores={trabajadores}/>}
           {!loading&&view==='trabajadores'&&<TabTrabajadores trabajadores={trabajadores} setTrabajadores={setTrabajadores} empresas={empresas} showNotif={showNotif}/>}
-          {!loading&&view==='reglas'&&<TabReglas/>}
+          {!loading&&view==='reglas'&&<TabReglas reglas={reglas} setReglas={setReglas} showNotif={showNotif}/>}
+          {!loading&&view==='docmensual'&&<TabDocMensual docMensual={docMensual} setDocMensual={setDocMensual} showNotif={showNotif}/>}
+          {!loading&&view==='whatsapp'&&<TabWhatsApp solicitudes={solicitudes}/>}
         </div>
       </div>
       <div style={{background:C.white,borderTop:`1px solid ${C.border}`,padding:'7px 24px',fontSize:11,color:C.gray4,textAlign:'right'}}>
@@ -289,47 +296,15 @@ function TabAlertas({alertas,setAlertas,showNotif}){
   )
 }
 
-// ── MAPA CHILE ────────────────────────────────────────────────
-// Proyección: x = (lng+75)*20, y = (-lat-17)*18
-const CHILE_REGIONES = [
-  { id:'XV', nombre:'Arica y Parinacota', color:'#FF8A65',
-    path:'M 94,6 L 124,6 L 128,14 L 126,44 L 98,44 L 94,34 Z' },
-  { id:'I',  nombre:'Tarapacá',           color:'#FFB74D',
-    path:'M 94,44 L 126,44 L 128,100 L 96,100 L 94,44 Z' },
-  { id:'II', nombre:'Antofagasta',         color:'#FFF176',
-    path:'M 92,100 L 128,100 L 134,200 L 90,200 Z' },
-  { id:'III',nombre:'Atacama',             color:'#AED581',
-    path:'M 86,200 L 134,200 L 138,256 L 84,256 Z' },
-  { id:'IV', nombre:'Coquimbo',            color:'#4DD0E1',
-    path:'M 80,256 L 138,256 L 136,306 L 78,306 Z' },
-  { id:'V',  nombre:'Valparaíso',          color:'#4FC3F7',
-    path:'M 68,306 L 136,306 L 132,332 L 66,332 Z' },
-  { id:'XIII',nombre:'Metropolitana',      color:'#BA68C8',
-    path:'M 66,332 L 132,332 L 128,360 L 64,360 Z' },
-  { id:'VI', nombre:"O'Higgins",           color:'#F48FB1',
-    path:'M 62,360 L 128,360 L 124,388 L 60,388 Z' },
-  { id:'VII',nombre:'Maule',               color:'#80CBC4',
-    path:'M 56,388 L 124,388 L 118,428 L 52,428 Z' },
-  { id:'XVI',nombre:'Ñuble',               color:'#FFCC02',
-    path:'M 50,428 L 118,428 L 112,452 L 46,452 Z' },
-  { id:'VIII',nombre:'Biobío',             color:'#81C784',
-    path:'M 42,452 L 112,452 L 106,488 L 38,488 Z' },
-  { id:'IX', nombre:'Araucanía',           color:'#FF8A65',
-    path:'M 36,488 L 106,488 L 98,522 L 32,522 Z' },
-  { id:'XIV',nombre:'Los Ríos',            color:'#4FC3F7',
-    path:'M 30,522 L 98,522 L 90,546 L 26,546 Z' },
-  { id:'X',  nombre:'Los Lagos',           color:'#AED581',
-    path:'M 22,546 L 90,546 L 86,604 L 16,604 Z' },
-  { id:'XI', nombre:'Aysén',               color:'#80CBC4',
-    path:'M 10,604 L 86,604 L 100,662 L 8,662 Z' },
-  { id:'XII',nombre:'Magallanes',          color:'#CE93D8',
-    path:'M 6,662 L 100,662 L 138,698 L 12,698 L 2,680 Z' },
-]
 
+// ── MAPA CHILE ────────────────────────────────────────────────
 function TabMapa({solicitudes}){
   const [hover,setHover] = useState(null)
+  const [filtroRegion, setFiltroRegion] = useState('')
+  const [filtroEstado, setFiltroEstado] = useState('')
 
-  // Cuenta solicitudes por sitio
+  const todosSitios = [...SITIOS, ...SITIOS_EXTRA]
+
   const statsBySitio = solicitudes.reduce((acc,s)=>{
     if(!acc[s.sitio]) acc[s.sitio]={total:0,aut:0,pend:0}
     acc[s.sitio].total++
@@ -338,56 +313,86 @@ function TabMapa({solicitudes}){
     return acc
   },{})
 
-  // Convierte lat/lng a SVG x,y
+  // Chile: lng approx -75 to -66, lat approx -17 to -56
+  // viewBox "0 0 200 820"
   function toSVG(lat,lng){
-    return { x: Math.round((lng+75)*20), y: Math.round((-lat-17)*18) }
+    const x = Math.round((lng + 75) * 22.2)
+    const y = Math.round((-lat - 17) * 21)
+    return { x: Math.max(8,Math.min(192,x)), y: Math.max(8,Math.min(812,y)) }
   }
 
-  // Color del punto en mapa según actividad
   function puntColor(sitioId){
     const s = statsBySitio[sitioId]||{}
-    if(s.aut>0)  return '#2E7D32'
-    if(s.pend>0) return '#E65100'
-    return '#1565C0'
+    if(s.aut>0)  return '#1B5E20'
+    if(s.pend>0) return '#BF360C'
+    return '#0D47A1'
   }
 
-  const hSitio = hover ? SITIOS.find(s=>s.id===hover) : null
+  const hSitio = hover ? todosSitios.find(s=>s.id===hover) : null
   const hStats = hover ? (statsBySitio[hover]||{total:0,aut:0,pend:0}) : null
+  const regiones = [...new Set(todosSitios.map(s=>s.regionLabel))].sort()
 
-  // Cuántos sitios hay por región
-  const sitiosPorRegion = SITIOS.reduce((acc,s)=>{
-    acc[s.regionLabel]=(acc[s.regionLabel]||0)+1; return acc
-  },{})
+  const sitiosFiltrados = todosSitios.filter(s =>
+    (!filtroRegion || s.regionLabel === filtroRegion) &&
+    (!filtroEstado ||
+      (filtroEstado==='activo'     && statsBySitio[s.id]?.total > 0) ||
+      (filtroEstado==='autorizado' && statsBySitio[s.id]?.aut > 0) ||
+      (filtroEstado==='pendiente'  && statsBySitio[s.id]?.pend > 0) ||
+      (filtroEstado==='inactivo'   && !statsBySitio[s.id])
+    )
+  )
+
+  const sitiosPorRegion = todosSitios.reduce((acc,s)=>{acc[s.regionLabel]=(acc[s.regionLabel]||0)+1;return acc},{})
+
+  const CHILE_PATH = 'M 108,8 L 138,10 L 148,22 L 152,55 L 150,120 L 154,200 L 150,260 L 142,310 L 134,345 L 122,368 L 116,392 L 110,432 L 102,468 L 92,502 L 80,537 L 70,562 L 64,596 L 57,641 L 47,681 L 40,721 L 32,761 L 24,800 L 62,808 L 122,808 L 160,800 L 168,770 L 158,740 L 148,700 L 150,651 L 162,611 L 157,566 L 150,521 L 144,481 L 147,441 L 144,401 L 140,361 L 142,321 L 147,276 L 160,231 L 162,181 L 164,131 L 160,81 L 150,41 L 140,18 Z'
 
   return(
     <div style={{animation:'fadeIn 0.3s ease'}}>
-      <h2 style={{margin:'0 0 4px',fontSize:18,fontWeight:700}}>Mapa de Sitios — Chile</h2>
-      <p style={{color:C.textS,fontSize:13,margin:'0 0 16px'}}>Hover sobre un sitio para ver detalle. Verde = autorizado · Naranja = pendiente · Azul = sin actividad.</p>
-      <div style={{display:'flex',gap:16,alignItems:'flex-start'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12,flexWrap:'wrap',gap:8}}>
+        <div>
+          <h2 style={{margin:'0 0 2px',fontSize:18,fontWeight:700}}>Mapa de Sitios — Chile</h2>
+          <p style={{color:C.textS,fontSize:13,margin:0}}>{todosSitios.length} sitios · {sitiosFiltrados.length} mostrados</p>
+        </div>
+        <div style={{display:'flex',gap:8}}>
+          <select value={filtroRegion} onChange={e=>setFiltroRegion(e.target.value)} style={{border:`1px solid ${C.border}`,borderRadius:4,padding:'5px 8px',fontSize:11,background:'#fff'}}>
+            <option value="">Todas las regiones</option>
+            {regiones.map(r=><option key={r}>{r}</option>)}
+          </select>
+          <select value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)} style={{border:`1px solid ${C.border}`,borderRadius:4,padding:'5px 8px',fontSize:11,background:'#fff'}}>
+            <option value="">Todos los estados</option>
+            <option value="activo">Con actividad</option>
+            <option value="autorizado">Autorizados</option>
+            <option value="pendiente">Pendientes</option>
+            <option value="inactivo">Sin actividad</option>
+          </select>
+        </div>
+      </div>
 
-        {/* Leyenda izquierda */}
-        <div style={{width:200,flexShrink:0,display:'flex',flexDirection:'column',gap:10}}>
+      <div style={{display:'flex',gap:12,alignItems:'flex-start'}}>
+
+        {/* Panel izquierdo */}
+        <div style={{width:185,flexShrink:0,display:'flex',flexDirection:'column',gap:10}}>
           <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:12}}>
-            <div style={{fontWeight:600,fontSize:12,marginBottom:8}}>Sitios</div>
-            {[['#2E7D32','Con accesos autorizados'],['#E65100','Pendientes de aprobar'],['#1565C0','Sin actividad reciente']].map(([c,l])=>(
-              <div key={l} style={{display:'flex',gap:6,alignItems:'center',marginBottom:5}}>
-                <div style={{width:10,height:10,borderRadius:'50%',background:c,flexShrink:0,border:'1.5px solid white',boxShadow:'0 0 0 1px '+c}}/>
-                <span style={{fontSize:11,color:C.textS}}>{l}</span>
+            <div style={{fontWeight:600,fontSize:12,marginBottom:8}}>Estado del sitio</div>
+            {[['#1B5E20','Con accesos autorizados'],['#BF360C','Pendientes de aprobar'],['#0D47A1','Sin actividad']].map(([c,l])=>(
+              <div key={l} style={{display:'flex',gap:7,alignItems:'center',marginBottom:5}}>
+                <div style={{width:11,height:11,borderRadius:'50%',background:c,flexShrink:0,boxShadow:`0 0 0 2.5px ${c}33`}}/>
+                <span style={{fontSize:10,color:C.textS}}>{l}</span>
               </div>
             ))}
           </div>
 
           {hSitio&&(
-            <div style={{background:C.white,border:`2px solid ${C.blue}`,borderRadius:6,padding:12,animation:'fadeIn 0.2s ease'}}>
-              <div style={{fontWeight:700,fontSize:12,color:C.red,marginBottom:4}}>{hSitio.id}</div>
-              <div style={{fontWeight:600,fontSize:12,marginBottom:3}}>{hSitio.nombre}</div>
-              <div style={{fontSize:11,color:C.textS,marginBottom:2}}>{hSitio.tipo} · {hSitio.altTotal}m</div>
-              <div style={{fontSize:11,color:C.textS,marginBottom:8}}>{hSitio.regionLabel}</div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:4}}>
-                {[['Total',hStats.total,C.blue],['Aut.',hStats.aut,C.green],['Pend.',hStats.pend,C.orange]].map(([l,v,col])=>(
-                  <div key={l} style={{textAlign:'center',background:C.gray1,borderRadius:3,padding:'4px 2px'}}>
-                    <div style={{fontWeight:800,fontSize:18,color:col}}>{v}</div>
-                    <div style={{fontSize:9,color:C.textS}}>{l}</div>
+            <div style={{background:C.white,border:`2px solid ${C.blue}`,borderRadius:6,padding:12,animation:'fadeIn 0.15s ease'}}>
+              <div style={{fontWeight:700,fontSize:11,color:C.red,marginBottom:2}}>{hSitio.id}</div>
+              <div style={{fontWeight:600,fontSize:12,marginBottom:2,lineHeight:1.2}}>{hSitio.nombre}</div>
+              <div style={{fontSize:10,color:C.textS}}>{hSitio.tipo} · {hSitio.altTotal}m</div>
+              <div style={{fontSize:10,color:C.textS,marginBottom:7}}>{hSitio.regionLabel}</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:3}}>
+                {[['Sols.',hStats.total,C.blue],['Aut.',hStats.aut,C.green],['Pend.',hStats.pend,C.orange]].map(([l,v,col])=>(
+                  <div key={l} style={{textAlign:'center',background:C.gray1,borderRadius:3,padding:'3px 0'}}>
+                    <div style={{fontWeight:800,fontSize:16,color:col}}>{v}</div>
+                    <div style={{fontSize:8,color:C.textS}}>{l}</div>
                   </div>
                 ))}
               </div>
@@ -395,9 +400,14 @@ function TabMapa({solicitudes}){
           )}
 
           <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:12}}>
-            <div style={{fontWeight:600,fontSize:12,marginBottom:8}}>Resumen</div>
-            {[['Sitios totales',SITIOS.length,C.blue],['Con actividad',Object.keys(statsBySitio).length,C.purple],['Autorizados',solicitudes.filter(s=>s.estado==='Autorizado').length,C.green],['Pendientes',solicitudes.filter(s=>['En Gestión Propietario','Validado'].includes(s.estado)).length,C.orange]].map(([l,v,col])=>(
-              <div key={l} style={{display:'flex',justifyContent:'space-between',marginBottom:5,fontSize:12}}>
+            <div style={{fontWeight:600,fontSize:12,marginBottom:6}}>Resumen</div>
+            {[
+              ['Total',todosSitios.length,C.blue],
+              ['Activos',Object.keys(statsBySitio).length,C.purple],
+              ['Autorizados',solicitudes.filter(s=>s.estado==='Autorizado').length,C.green],
+              ['Pendientes',solicitudes.filter(s=>['En Gestión Propietario','Validado'].includes(s.estado)).length,C.orange],
+            ].map(([l,v,col])=>(
+              <div key={l} style={{display:'flex',justifyContent:'space-between',marginBottom:4,fontSize:11}}>
                 <span style={{color:C.textS}}>{l}</span><strong style={{color:col}}>{v}</strong>
               </div>
             ))}
@@ -405,56 +415,74 @@ function TabMapa({solicitudes}){
         </div>
 
         {/* MAPA SVG */}
-        <div style={{flex:1,background:'#EEF7FF',border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',position:'relative'}}>
-          <svg viewBox="0 0 160 710" width="100%" style={{display:'block',maxHeight:680}}>
-            {/* Regiones */}
-            {CHILE_REGIONES.map(r=>(
-              <g key={r.id}>
-                <path d={r.path} fill={r.color} stroke="white" strokeWidth="1.5" opacity="0.85"/>
-                <text
-                  x={parseInt(r.path.match(/M (\d+)/)[1]) + 4}
-                  y={parseInt(r.path.match(/L \d+,(\d+)/)[1]) + 14}
-                  fontSize="7" fill="#333" fontWeight="700" style={{pointerEvents:'none'}}>
-                  {r.id}
-                </text>
-              </g>
+        <div style={{flex:1,background:'linear-gradient(175deg,#B8D8F0 0%,#8EC4E8 40%,#A8CDE8 100%)',border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',position:'relative'}}>
+          <div style={{position:'absolute',left:6,top:'35%',fontSize:8,color:'rgba(20,80,140,0.5)',fontWeight:700,letterSpacing:2,writingMode:'vertical-rl',transform:'rotate(180deg)',pointerEvents:'none'}}>OCÉANO PACÍFICO</div>
+          <div style={{position:'absolute',right:6,top:'30%',fontSize:8,color:'rgba(100,60,20,0.4)',fontWeight:700,letterSpacing:1,writingMode:'vertical-rl',pointerEvents:'none'}}>ARGENTINA</div>
+          <svg viewBox="0 0 200 820" width="100%" style={{display:'block',maxHeight:660}}>
+            <defs>
+              <linearGradient id="chG" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#D7ECD9"/>
+                <stop offset="50%" stopColor="#A8D5AB"/>
+                <stop offset="100%" stopColor="#7DBD82"/>
+              </linearGradient>
+              <filter id="shd"><feDropShadow dx="1.5" dy="2" stdDeviation="2.5" floodOpacity="0.18"/></filter>
+            </defs>
+
+            {/* Territorio */}
+            <path d={CHILE_PATH} fill="url(#chG)" stroke="#4A8C50" strokeWidth="1.2" filter="url(#shd)"/>
+
+            {/* Divisiones regionales */}
+            {[52,120,200,259,310,345,390,432,468,502,537,562,596,641,681].map(y=>(
+              <line key={y} x1="55" y1={y} x2="163" y2={y} stroke="#3A7A4033" strokeWidth="0.6" strokeDasharray="4,3"/>
             ))}
 
+            {/* Cordillera de los Andes */}
+            <path d="M 148,22 L 154,55 L 150,120 L 154,200 L 150,260 L 142,310 L 147,276 L 160,231 L 162,181 L 164,131 L 160,81 L 150,41"
+              fill="none" stroke="#96784A" strokeWidth="1.8" strokeDasharray="3,2" opacity="0.35"/>
+
             {/* Puntos de sitios */}
-            {SITIOS.map(s=>{
+            {sitiosFiltrados.map(s=>{
               const pt = toSVG(s.lat, s.lng)
               const isH = hover===s.id
               const col = puntColor(s.id)
+              const active = !!statsBySitio[s.id]
               return(
-                <g key={s.id} style={{cursor:'pointer'}}
-                   onMouseEnter={()=>setHover(s.id)}
-                   onMouseLeave={()=>setHover(null)}>
-                  {isH&&<circle cx={pt.x} cy={pt.y} r={12} fill={col} opacity={0.2}/>}
-                  <circle cx={pt.x} cy={pt.y} r={isH?7:5} fill={col} stroke="white" strokeWidth={1.5}/>
-                  {isH&&(
-                    <text x={pt.x+9} y={pt.y+4} fontSize="7" fill="#333" fontWeight="700"
-                      style={{pointerEvents:'none',textShadow:'0 0 3px white'}}>
-                      {s.id.replace('CL-TAR-','T').replace('CL','').slice(0,5)}
-                    </text>
-                  )}
+                <g key={s.id} style={{cursor:'pointer'}} onMouseEnter={()=>setHover(s.id)} onMouseLeave={()=>setHover(null)}>
+                  {isH&&<circle cx={pt.x} cy={pt.y} r={15} fill={col} opacity={0.12}/>}
+                  {isH&&<circle cx={pt.x} cy={pt.y} r={9}  fill={col} opacity={0.25}/>}
+                  <circle cx={pt.x} cy={pt.y} r={isH?6.5:active?4.5:3} fill={col} stroke="white" strokeWidth={isH?2:1} opacity={isH?1:active?0.9:0.7}/>
+                  {isH&&<text x={pt.x+9} y={pt.y+4} fontSize="6.5" fill="#111" fontWeight="800" style={{pointerEvents:'none',filter:'drop-shadow(0 0 3px rgba(255,255,255,0.9))'}}>{s.id.length>8?s.id.slice(-7):s.id}</text>}
                 </g>
               )
             })}
+
+            {/* Ciudades referencia */}
+            {[
+              {n:'Arica',x:96,y:20},{n:'Iquique',x:82,y:56},{n:'Antofagasta',x:76,y:115},
+              {n:'La Serena',x:64,y:249},{n:'Valparaíso',x:52,y:315},{n:'Santiago ●',x:55,y:340},
+              {n:'Concepción',x:42,y:461},{n:'Puerto Montt',x:32,y:559},{n:'Coyhaique',x:40,y:646},
+              {n:'Pta.Arenas',x:46,y:773},
+            ].map(c=>(
+              <text key={c.n} x={c.x} y={c.y} fontSize="5.8" fill="#1a4a6e" fontWeight={c.n.includes('●')?'800':'600'} opacity="0.72" style={{pointerEvents:'none'}}>{c.n}</text>
+            ))}
+
+            {/* Nota escala */}
+            <text x="10" y="815" fontSize="5" fill="#555" opacity="0.5">~1.500 sitios ATP Chile — Vista demo</text>
           </svg>
         </div>
 
         {/* Tabla derecha */}
-        <div style={{width:190,flexShrink:0}}>
-          <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:12}}>
-            <div style={{fontWeight:600,fontSize:12,marginBottom:10}}>Sitios por región</div>
+        <div style={{width:168,flexShrink:0}}>
+          <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:10}}>
+            <div style={{fontWeight:600,fontSize:11,marginBottom:8,color:C.text}}>Sitios por región</div>
             {Object.entries(sitiosPorRegion).sort((a,b)=>b[1]-a[1]).map(([reg,n])=>(
-              <div key={reg} style={{marginBottom:6}}>
-                <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}}>
-                  <span style={{color:C.textS,flex:1}}>{reg}</span>
-                  <strong style={{color:C.blue}}>{n}</strong>
+              <div key={reg} style={{marginBottom:5}}>
+                <div style={{display:'flex',justifyContent:'space-between',fontSize:10,marginBottom:1}}>
+                  <span style={{color:C.textS,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:115,fontSize:9}}>{reg}</span>
+                  <strong style={{color:C.blue,marginLeft:3,fontSize:10}}>{n}</strong>
                 </div>
-                <div style={{height:4,background:C.gray2,borderRadius:2}}>
-                  <div style={{height:'100%',background:C.blue,borderRadius:2,width:`${n/SITIOS.length*100}%`}}/>
+                <div style={{height:3,background:C.gray2,borderRadius:2}}>
+                  <div style={{height:'100%',background:C.blue,borderRadius:2,width:`${n/todosSitios.length*100}%`,transition:'width 0.3s'}}/>
                 </div>
               </div>
             ))}
@@ -969,29 +997,504 @@ function TabTrabajadores({trabajadores,setTrabajadores,empresas,showNotif}){
   )
 }
 
-function TabReglas(){
-  return(
-    <div style={{animation:'fadeIn 0.3s ease'}}>
-      <h2 style={{margin:'0 0 4px',fontSize:18,fontWeight:700}}>Reglas del Motor de Validación</h2>
-      <p style={{color:C.textS,fontSize:13,margin:'0 0 20px'}}>Aplicadas automáticamente por PrimeCorp en cada solicitud.</p>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
-        <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:18}}>
-          <div style={{fontWeight:600,fontSize:14,marginBottom:12,color:C.red}}>⏱️ Ventanas por tipo de trabajo</div>
-          <table style={{width:'100%',borderCollapse:'collapse'}}>
-            <thead><tr style={{background:C.gray1}}>{['Tipo','Días máx.'].map(h=><th key={h} style={{padding:'7px 10px',textAlign:'left',fontSize:11,color:C.textS,fontWeight:600,borderBottom:`1px solid ${C.border}`}}>{h}</th>)}</tr></thead>
-            <tbody>{TIPOS_TRABAJO.map((t,i)=><tr key={t} style={{borderBottom:`1px solid ${C.gray2}`,background:i%2===0?C.white:C.gray1}}><td style={{padding:'7px 10px',fontSize:11,fontWeight:600}}>{t}</td><td style={{padding:'7px 10px',fontSize:14,fontWeight:800,color:C.red}}>{VENTANA_MAX[t]}d</td></tr>)}</tbody>
-          </table>
+function TabReglas({ reglas, setReglas, showNotif }) {
+  const [busq, setBusq]         = useState('')
+  const [editSitio, setEditSitio] = useState(null)
+  const [form, setForm]         = useState({})
+  const [saving, setSaving]     = useState(false)
+
+  const todosLosSitios = [...SITIOS, ...SITIOS_EXTRA]
+
+  function startEdit(s) {
+    const r = reglas[s.id] || {}
+    setForm({
+      no_fines_semana:   r.no_fines_semana   || false,
+      solo_dias_habiles: r.solo_dias_habiles  || false,
+      hora_inicio:       r.hora_inicio        || '',
+      hora_fin:          r.hora_fin           || '',
+      complejo_acceso:   r.complejo_acceso    || false,
+      docs_requeridos:   r.docs_requeridos    || [],
+      nota_acceso:       r.nota_acceso        || '',
+    })
+    setEditSitio(s.id)
+  }
+
+  function toggleDoc(doc) {
+    setForm(f => ({
+      ...f,
+      docs_requeridos: f.docs_requeridos.includes(doc)
+        ? f.docs_requeridos.filter(d => d !== doc)
+        : [...f.docs_requeridos, doc]
+    }))
+  }
+
+  async function guardar() {
+    setSaving(true)
+    const ok = await upsertReglaSitio({ sitio_id: editSitio, ...form })
+    if (ok !== false) {
+      setReglas(r => ({ ...r, [editSitio]: { sitio_id: editSitio, ...form } }))
+      setEditSitio(null)
+      showNotif('✅ Reglas guardadas')
+    }
+    setSaving(false)
+  }
+
+  const filtrados = todosLosSitios.filter(s =>
+    s.id.toLowerCase().includes(busq.toLowerCase()) ||
+    s.nombre.toLowerCase().includes(busq.toLowerCase()) ||
+    s.regionLabel.toLowerCase().includes(busq.toLowerCase())
+  )
+
+  const conReglas = Object.keys(reglas).filter(id => {
+    const r = reglas[id]
+    return r && (r.no_fines_semana || r.solo_dias_habiles || r.complejo_acceso || r.docs_requeridos?.length > 0)
+  })
+
+  const inp = { width: '100%', border: `1px solid ${C.border}`, borderRadius: 4, padding: '7px 10px', fontSize: 12, fontFamily: 'inherit' }
+
+  return (
+    <div style={{ animation: 'fadeIn 0.3s ease' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+        <div>
+          <h2 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 700 }}>Motor de Reglas por Sitio</h2>
+          <p style={{ color: C.textS, fontSize: 13, margin: '0 0 16px' }}>Configura restricciones automáticas y documentación requerida por sitio. Los operadores ven estas reglas al crear solicitudes.</p>
         </div>
-        <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:18}}>
-          <div style={{fontWeight:600,fontSize:14,marginBottom:12,color:C.red}}>📋 Validaciones automáticas</div>
-          {[['🔌','Colocalización','Operador debe estar colocalizado en el sitio'],['⏱️','Ventana de trabajo','Duración máxima según tipo de trabajo'],['📅','Conflicto de fechas','Nadie puede tomar fechas ya reservadas en el mismo sitio'],['👷','Acreditación','Trabajadores deben estar acreditados y vigentes'],['📧','Correos obligatorios','Mandante + contratista requeridos'],['📋','RUT formato','XX.XXX.XXX-X obligatorio para empresa y técnicos'],['✅','Nombres obligatorios','Nombre completo requerido para cada técnico']].map(([ic,t,d])=>(
-            <div key={t} style={{display:'flex',gap:10,padding:'8px 0',borderBottom:`1px solid ${C.gray2}`}}>
-              <span style={{fontSize:15,flexShrink:0}}>{ic}</span>
-              <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600}}>{t}</div><div style={{fontSize:11,color:C.textS,marginTop:1}}>{d}</div></div>
-              <span style={{color:C.green,fontSize:14,alignSelf:'center'}}>✓</span>
+        <div style={{ background: C.amberL, border: '1px solid #FFE082', borderRadius: 6, padding: '8px 14px', fontSize: 12, textAlign: 'center' }}>
+          <div style={{ fontWeight: 700, color: C.amber }}>{conReglas.length}</div>
+          <div style={{ color: C.textS }}>sitios con reglas</div>
+        </div>
+      </div>
+
+      {/* Resumen de reglas activas */}
+      {conReglas.length > 0 && (
+        <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 6, padding: 14, marginBottom: 14 }}>
+          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>⚡ Sitios con reglas activas</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {conReglas.map(id => {
+              const r = reglas[id]
+              const s = todosLosSitios.find(x => x.id === id)
+              return (
+                <div key={id} style={{ background: r.complejo_acceso ? C.redL : C.blueL, border: `1px solid ${r.complejo_acceso ? C.red : C.blue}44`, borderRadius: 6, padding: '6px 10px', fontSize: 11 }}>
+                  <div style={{ fontWeight: 700, color: r.complejo_acceso ? C.red : C.blue }}>{id}</div>
+                  <div style={{ color: C.textS, fontSize: 10 }}>
+                    {[r.complejo_acceso && '🔒 Complejo', r.no_fines_semana && '📅 Sin fds', r.docs_requeridos?.length > 0 && `📄 ${r.docs_requeridos.length} doc(s)`].filter(Boolean).join(' · ')}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      <input value={busq} onChange={e => setBusq(e.target.value)} placeholder="🔍 Buscar sitio por ID, nombre o región..." style={{ width: '100%', border: `1px solid ${C.border}`, borderRadius: 6, padding: '9px 14px', fontSize: 13, marginBottom: 12, fontFamily: 'inherit' }} />
+
+      <div style={{ fontSize: 11, color: C.textS, marginBottom: 10 }}>{filtrados.length} de {todosLosSitios.length} sitios</div>
+
+      {filtrados.slice(0, 30).map(s => {
+        const r = reglas[s.id] || {}
+        const isEdit = editSitio === s.id
+        const tieneReglas = r.no_fines_semana || r.solo_dias_habiles || r.complejo_acceso || r.docs_requeridos?.length > 0
+
+        return (
+          <div key={s.id} style={{ background: C.white, border: `1px solid ${tieneReglas ? C.blue + '44' : C.border}`, borderLeft: `4px solid ${r.complejo_acceso ? C.red : tieneReglas ? C.blue : C.gray3}`, borderRadius: 6, padding: '12px 16px', marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isEdit ? 12 : 0 }}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 700, fontSize: 13, color: r.complejo_acceso ? C.red : C.text }}>{s.id}</span>
+                <span style={{ fontSize: 12 }}>{s.nombre}</span>
+                <span style={{ fontSize: 11, color: C.textS }}>{s.regionLabel}</span>
+                {r.complejo_acceso && <span style={{ background: C.redL, color: C.red, borderRadius: 10, padding: '1px 8px', fontSize: 10, fontWeight: 700 }}>🔒 Complejo Acceso</span>}
+                {r.no_fines_semana && <span style={{ background: C.amberL, color: C.amber, borderRadius: 10, padding: '1px 8px', fontSize: 10, fontWeight: 700 }}>📅 Sin fines de semana</span>}
+                {r.solo_dias_habiles && <span style={{ background: C.blueL, color: C.blue, borderRadius: 10, padding: '1px 8px', fontSize: 10, fontWeight: 700 }}>📅 Solo días hábiles</span>}
+                {r.docs_requeridos?.length > 0 && <span style={{ background: C.purpleL, color: C.purple, borderRadius: 10, padding: '1px 8px', fontSize: 10, fontWeight: 700 }}>📄 {r.docs_requeridos.length} doc(s) requerido(s)</span>}
+              </div>
+              <button onClick={() => isEdit ? setEditSitio(null) : startEdit(s)}
+                style={{ background: isEdit ? C.red : C.blue, color: '#fff', border: 'none', borderRadius: 4, padding: '4px 12px', cursor: 'pointer', fontSize: 11, fontWeight: 600, flexShrink: 0 }}>
+                {isEdit ? '✕ Cerrar' : '⚙️ Configurar'}
+              </button>
+            </div>
+
+            {isEdit && (
+              <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
+                {/* Restricciones de horario */}
+                <div style={{ fontWeight: 600, fontSize: 12, color: C.textS, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>⏰ Restricciones de Acceso</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '8px 12px', borderRadius: 4, border: `1px solid ${form.no_fines_semana ? C.amber : C.border}`, background: form.no_fines_semana ? C.amberL : C.white }}>
+                    <input type="checkbox" checked={form.no_fines_semana} onChange={e => setForm(f => ({ ...f, no_fines_semana: e.target.checked }))} />
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 12 }}>Sin acceso fines de semana</div>
+                      <div style={{ fontSize: 10, color: C.textS }}>Bloquea sábado y domingo</div>
+                    </div>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '8px 12px', borderRadius: 4, border: `1px solid ${form.solo_dias_habiles ? C.blue : C.border}`, background: form.solo_dias_habiles ? C.blueL : C.white }}>
+                    <input type="checkbox" checked={form.solo_dias_habiles} onChange={e => setForm(f => ({ ...f, solo_dias_habiles: e.target.checked }))} />
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 12 }}>Solo días hábiles</div>
+                      <div style={{ fontSize: 10, color: C.textS }}>Bloquea feriados nacionales</div>
+                    </div>
+                  </label>
+                  <div>
+                    <label style={{ fontSize: 11, color: C.textS, display: 'block', marginBottom: 3 }}>Horario de inicio permitido</label>
+                    <input type="time" value={form.hora_inicio} onChange={e => setForm(f => ({ ...f, hora_inicio: e.target.value }))} style={inp} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: C.textS, display: 'block', marginBottom: 3 }}>Horario de fin permitido</label>
+                    <input type="time" value={form.hora_fin} onChange={e => setForm(f => ({ ...f, hora_fin: e.target.value }))} style={inp} />
+                  </div>
+                </div>
+
+                {/* Complejo acceso */}
+                <div style={{ fontWeight: 600, fontSize: 12, color: C.textS, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>🔒 Acceso Complejo</div>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '10px 14px', borderRadius: 6, border: `2px solid ${form.complejo_acceso ? C.red : C.border}`, background: form.complejo_acceso ? '#FFF5F5' : C.white, marginBottom: 12 }}>
+                  <input type="checkbox" checked={form.complejo_acceso} onChange={e => setForm(f => ({ ...f, complejo_acceso: e.target.checked }))} style={{ marginTop: 2 }} />
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: form.complejo_acceso ? C.red : C.text }}>🔒 Marcar como Sitio de Complejo Acceso</div>
+                    <div style={{ fontSize: 11, color: C.textS, marginTop: 2 }}>Los operadores ven una alerta prominente. El equipo ATP recibe notificación automática para gestión manual.</div>
+                  </div>
+                </label>
+                {form.complejo_acceso && (
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ fontSize: 11, color: C.textS, display: 'block', marginBottom: 3 }}>Instrucción especial de acceso (visible al operador)</label>
+                    <input value={form.nota_acceso} onChange={e => setForm(f => ({ ...f, nota_acceso: e.target.value }))} placeholder="Ej: Requiere coordinación previa con guardia. Contactar a Seguridad al 56-9-1234-5678." style={inp} />
+                  </div>
+                )}
+
+                {/* Documentación obligatoria */}
+                <div style={{ fontWeight: 600, fontSize: 12, color: C.textS, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 0.5 }}>📄 Documentación Obligatoria</div>
+                <div style={{ background: C.gray1, borderRadius: 6, padding: 12, marginBottom: 14 }}>
+                  <div style={{ fontSize: 12, color: C.textS, marginBottom: 8 }}>Selecciona los documentos que el operador debe confirmar antes de enviar la solicitud:</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    {TIPOS_DOCS_SITIO.map(doc => (
+                      <label key={doc} style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', padding: '6px 8px', borderRadius: 4, border: `1px solid ${form.docs_requeridos.includes(doc) ? C.purple : C.border}`, background: form.docs_requeridos.includes(doc) ? C.purpleL : C.white, fontSize: 12 }}>
+                        <input type="checkbox" checked={form.docs_requeridos.includes(doc)} onChange={() => toggleDoc(doc)} />
+                        <span style={{ fontWeight: form.docs_requeridos.includes(doc) ? 600 : 400, color: form.docs_requeridos.includes(doc) ? C.purple : C.text }}>{doc}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button onClick={guardar} disabled={saving}
+                    style={{ background: saving ? C.gray3 : C.green, color: saving ? C.gray4 : '#fff', border: 'none', borderRadius: 4, padding: '8px 20px', fontWeight: 700, cursor: saving ? 'wait' : 'pointer', fontSize: 13 }}>
+                    {saving ? '⏳ Guardando...' : '💾 Guardar reglas'}
+                  </button>
+                  <button onClick={() => setEditSitio(null)} style={{ background: 'transparent', color: C.textS, border: `1px solid ${C.border}`, borderRadius: 4, padding: '8px 14px', cursor: 'pointer' }}>Cancelar</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
+      {filtrados.length > 30 && <div style={{ textAlign: 'center', padding: 12, fontSize: 12, color: C.textS }}>Mostrando 30 de {filtrados.length} — usa el buscador para filtrar</div>}
+
+      {/* Tabla de ventanas por tipo (informativa) */}
+      <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 6, padding: 18, marginTop: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12, color: C.red }}>⏱️ Ventanas máximas globales por tipo de trabajo</div>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr style={{ background: C.gray1 }}>{['Tipo de trabajo', 'Días máx.'].map(h => <th key={h} style={{ padding: '7px 10px', textAlign: 'left', fontSize: 11, color: C.textS, fontWeight: 600, borderBottom: `1px solid ${C.border}` }}>{h}</th>)}</tr></thead>
+          <tbody>{TIPOS_TRABAJO.map((t, i) => <tr key={t} style={{ borderBottom: `1px solid ${C.gray2}`, background: i % 2 === 0 ? C.white : C.gray1 }}><td style={{ padding: '7px 10px', fontSize: 11, fontWeight: 600 }}>{t}</td><td style={{ padding: '7px 10px', fontSize: 14, fontWeight: 800, color: C.red }}>{VENTANA_MAX[t]}d</td></tr>)}</tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ── TAB DOC MENSUAL ───────────────────────────────────────────
+function TabDocMensual({ docMensual, setDocMensual, showNotif }) {
+  const [editMode, setEditMode] = useState(!docMensual)
+  const [mes, setMes]           = useState(docMensual?.mes || new Date().toISOString().slice(0, 7))
+  const [empresas, setEmpresas] = useState(docMensual?.empresasAutorizadas || [])
+  const [nuevaEmp, setNuevaEmp] = useState('')
+  const [nuevosTipos, setNuevosTipos] = useState([])
+  const [nota, setNota]         = useState(docMensual?.nota || '')
+
+  const mesLabel = mes ? new Date(mes + '-01').toLocaleDateString('es-CL', { month: 'long', year: 'numeric' }) : ''
+
+  function agregarEmpresa() {
+    if (!nuevaEmp.trim()) return
+    const tipos = TIPOS_TRABAJO.filter(t => nuevosTipos.includes(t))
+    setEmpresas(prev => [...prev.filter(e => e.nombre !== nuevaEmp.trim()), { nombre: nuevaEmp.trim(), tiposAutorizados: tipos.length > 0 ? tipos : TIPOS_TRABAJO }])
+    setNuevaEmp('')
+    setNuevosTipos([])
+  }
+
+  function quitarEmpresa(nombre) {
+    setEmpresas(prev => prev.filter(e => e.nombre !== nombre))
+  }
+
+  function guardar() {
+    const doc = { mes, empresasAutorizadas: empresas, nota, updatedAt: new Date().toISOString() }
+    saveDocMensual(doc)
+    setDocMensual(doc)
+    setEditMode(false)
+    showNotif('✅ Documento mensual guardado')
+  }
+
+  const inp = { border: `1px solid ${C.border}`, borderRadius: 4, padding: '7px 10px', fontSize: 13, fontFamily: 'inherit' }
+
+  return (
+    <div style={{ animation: 'fadeIn 0.3s ease' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+        <div>
+          <h2 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 700 }}>Documento de Autorización Mensual</h2>
+          <p style={{ color: C.textS, fontSize: 13, margin: '0 0 16px' }}>Define qué empresas contratistas están autorizadas para operar este mes y qué tipos de trabajo pueden realizar. El sistema valida esto al momento de ingresar una solicitud.</p>
+        </div>
+        {!editMode && <button onClick={() => setEditMode(true)} style={{ background: C.blue, color: '#fff', border: 'none', borderRadius: 4, padding: '7px 16px', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>✏️ Editar</button>}
+      </div>
+
+      {!editMode && docMensual ? (
+        <div>
+          <div style={{ background: `linear-gradient(135deg, ${C.blue}, #1976D2)`, borderRadius: 10, padding: 20, color: '#fff', marginBottom: 16 }}>
+            <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 4 }}>Período vigente</div>
+            <div style={{ fontWeight: 800, fontSize: 22, marginBottom: 4 }}>{new Date(docMensual.mes + '-01').toLocaleDateString('es-CL', { month: 'long', year: 'numeric' }).toUpperCase()}</div>
+            <div style={{ fontSize: 13, opacity: 0.85 }}>{docMensual.empresasAutorizadas?.length || 0} empresas autorizadas · Actualizado {new Date(docMensual.updatedAt).toLocaleDateString('es-CL')}</div>
+            {docMensual.nota && <div style={{ marginTop: 8, fontSize: 12, opacity: 0.9, background: 'rgba(255,255,255,0.15)', borderRadius: 4, padding: '6px 10px' }}>📝 {docMensual.nota}</div>}
+          </div>
+          {docMensual.empresasAutorizadas?.map(e => (
+            <div key={e.nombre} style={{ background: C.white, border: `1px solid ${C.border}`, borderLeft: `4px solid ${C.green}`, borderRadius: 6, padding: '12px 16px', marginBottom: 8 }}>
+              <div style={{ fontWeight: 600, fontSize: 14, color: C.green, marginBottom: 6 }}>✅ {e.nombre}</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {(e.tiposAutorizados || TIPOS_TRABAJO).map(t => (
+                  <span key={t} style={{ background: C.greenL, color: C.green, borderRadius: 10, padding: '2px 8px', fontSize: 10, fontWeight: 600 }}>{t}</span>
+                ))}
+              </div>
             </div>
           ))}
         </div>
+      ) : (
+        <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12, marginBottom: 16 }}>
+            <div>
+              <label style={{ fontSize: 11, color: C.textS, display: 'block', marginBottom: 4, fontWeight: 600 }}>Mes de vigencia</label>
+              <input type="month" value={mes} onChange={e => setMes(e.target.value)} style={{ ...inp, width: '100%' }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: C.textS, display: 'block', marginBottom: 4, fontWeight: 600 }}>Nota / observaciones (opcional)</label>
+              <input value={nota} onChange={e => setNota(e.target.value)} placeholder="Ej: Paralización obras Región Norte suspendida hasta resolución judicial..." style={{ ...inp, width: '100%' }} />
+            </div>
+          </div>
+
+          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Empresas autorizadas este mes</div>
+
+          {/* Empresas ya agregadas */}
+          {empresas.map(e => (
+            <div key={e.nombre} style={{ background: C.greenL, border: `1px solid ${C.green}44`, borderRadius: 6, padding: '10px 14px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 13, color: C.green }}>✅ {e.nombre}</div>
+                <div style={{ fontSize: 11, color: C.textS, marginTop: 3 }}>Trabajos: {(e.tiposAutorizados || []).join(' · ')}</div>
+              </div>
+              <button onClick={() => quitarEmpresa(e.nombre)} style={{ background: 'transparent', border: 'none', color: C.red, cursor: 'pointer', fontSize: 16 }}>✕</button>
+            </div>
+          ))}
+
+          {/* Agregar empresa */}
+          <div style={{ background: C.gray1, border: `1px dashed ${C.border}`, borderRadius: 6, padding: 16, marginBottom: 16 }}>
+            <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 10 }}>+ Agregar empresa</div>
+            <input value={nuevaEmp} onChange={e => setNuevaEmp(e.target.value)} onKeyDown={e => e.key === 'Enter' && agregarEmpresa()} placeholder="Nombre empresa contratista..." style={{ ...inp, width: '100%', marginBottom: 10 }} />
+            <div style={{ fontSize: 11, color: C.textS, marginBottom: 6 }}>Tipos de trabajo autorizados (deja vacío para todos):</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+              {TIPOS_TRABAJO.map(t => (
+                <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', padding: '4px 8px', borderRadius: 4, border: `1px solid ${nuevosTipos.includes(t) ? C.blue : C.border}`, background: nuevosTipos.includes(t) ? C.blueL : C.white, fontSize: 11 }}>
+                  <input type="checkbox" checked={nuevosTipos.includes(t)} onChange={() => setNuevosTipos(p => p.includes(t) ? p.filter(x => x !== t) : [...p, t])} />
+                  {t}
+                </label>
+              ))}
+            </div>
+            <button onClick={agregarEmpresa} disabled={!nuevaEmp.trim()} style={{ background: C.blue, color: '#fff', border: 'none', borderRadius: 4, padding: '6px 16px', cursor: nuevaEmp.trim() ? 'pointer' : 'not-allowed', fontWeight: 600, fontSize: 12, opacity: nuevaEmp.trim() ? 1 : 0.5 }}>+ Agregar</button>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={guardar} style={{ background: C.green, color: '#fff', border: 'none', borderRadius: 4, padding: '9px 22px', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>💾 Guardar documento</button>
+            {docMensual && <button onClick={() => setEditMode(false)} style={{ background: 'transparent', color: C.textS, border: `1px solid ${C.border}`, borderRadius: 4, padding: '9px 14px', cursor: 'pointer' }}>Cancelar</button>}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── TAB WHATSAPP IA ───────────────────────────────────────────
+const CONV_DEMO = [
+  {
+    id: 'WA-001', sitio: 'CL48769', nombre: 'Carlos Rojas', tel: '+56 9 7234 5678',
+    estado: 'autorizado', ts: '2026-03-20 14:32',
+    mensajes: [
+      { rol: 'sistema', texto: '📬 Solicitud ATP-CL-26-1700 enviada al propietario', ts: '14:30' },
+      { rol: 'bot', texto: '¡Hola Carlos! Soy el asistente de ATP Chile 🤝\n\nTienes una solicitud de acceso pendiente para tu sitio *MERCED-SAN ANTONIO* (CL48769).\n\n*Operador:* Telefónica Móviles Chile\n*Trabajo:* OPERACION Y MANTENIMIENTO\n*Fechas:* 25-03-2026 al 27-03-2026\n*Personal:* 2 técnicos\n\n¿Autorizas el acceso? Responde *SÍ* para autorizar o *NO* para rechazar.', ts: '14:30' },
+      { rol: 'propietario', texto: '¿Y cuánto tiempo estarán en el sitio?', ts: '14:31' },
+      { rol: 'bot', texto: 'El trabajo de Operación y Mantenimiento tiene una ventana de hasta 5 días. En este caso la solicitud es de 3 días (25 al 27 de marzo).\n\nEl personal permanecerá solo el tiempo necesario y dejará el sitio en las mismas condiciones. ¿Tienes alguna otra consulta?', ts: '14:31' },
+      { rol: 'propietario', texto: 'SÍ, autorizo', ts: '14:32' },
+      { rol: 'bot', texto: '✅ ¡Perfecto! He registrado tu autorización.\n\nEl equipo de ATP Chile ha sido notificado y los técnicos podrán acceder los días acordados.\n\nGracias por tu pronta respuesta, Carlos. ¡Que tengas un excelente día! 😊', ts: '14:32' },
+    ]
+  },
+  {
+    id: 'WA-002', sitio: 'CL31102', nombre: 'Luis Muñoz', tel: '+56 32 234 5678',
+    estado: 'rechazado', ts: '2026-03-21 09:15',
+    mensajes: [
+      { rol: 'sistema', texto: '📬 Solicitud ATP-CL-26-1703 enviada al propietario', ts: '09:10' },
+      { rol: 'bot', texto: '¡Hola Luis! Te escribo desde ATP Chile.\n\nTienes una solicitud de acceso para *VALPARAÍSO CENTRO* (CL31102).\n\n*Operador:* Entel PCS\n*Trabajo:* INSTALACIÓN\n*Fechas:* 22-03-2026 al 28-03-2026\n\n¿Autorizas el acceso?', ts: '09:10' },
+      { rol: 'propietario', texto: 'No, ese día tenemos evento en el edificio', ts: '09:14' },
+      { rol: 'bot', texto: 'Entendido, Luis. Para procesar el rechazo necesito que me indiques brevemente el motivo para registrarlo en el sistema.\n\n¿Puedes confirmar: "Rechazo por evento en el edificio"?', ts: '09:14' },
+      { rol: 'propietario', texto: 'Sí, rechazo por evento corporativo 22-28 marzo, no pueden ingresar', ts: '09:15' },
+      { rol: 'bot', texto: '✅ Registrado. He marcado la solicitud como *rechazada* con motivo:\n"Evento corporativo 22-28 marzo. Acceso no permitido durante ese período."\n\nEl equipo de Entel PCS y ATP Chile han sido notificados para que coordinen una nueva fecha. ¡Gracias, Luis!', ts: '09:15' },
+    ]
+  },
+  {
+    id: 'WA-003', sitio: 'CL-RM-001', nombre: 'Nicolás Lagos', tel: '+56 9 9876 5432',
+    estado: 'pendiente', ts: '2026-03-22 11:05',
+    mensajes: [
+      { rol: 'sistema', texto: '📬 Solicitud ATP-CL-26-1708 enviada al propietario', ts: '11:00' },
+      { rol: 'bot', texto: 'Hola Nicolás 👋 Soy el asistente de ATP Chile.\n\nHay una solicitud de acceso para *SANTIAGO CENTRO* (CL-RM-001).\n\n*Operador:* WOM S.A.\n*Trabajo:* LEVANTAMIENTO OBSERVACIONES\n*Fechas:* 24-03-2026\n*Personal:* 1 técnico\n\n¿Puedes autorizar el acceso?', ts: '11:00' },
+      { rol: 'propietario', texto: '¿Qué empresa va?', ts: '11:04' },
+      { rol: 'bot', texto: 'La empresa contratista asignada es *TelcoServ SpA*, empresa acreditada en el registro ATP Chile.\n\nEl técnico cuenta con toda la documentación y certificaciones al día.\n\n¿Autorizas el acceso para el 24 de marzo?', ts: '11:05' },
+    ]
+  },
+]
+
+function TabWhatsApp({ solicitudes }) {
+  const [convActiva, setConvActiva] = useState('WA-001')
+  const [mensaje, setMensaje]       = useState('')
+  const [convs, setConvs]           = useState(CONV_DEMO)
+  const [enviando, setEnviando]     = useState(false)
+  const mensajesRef = React.useRef(null)
+
+  const conv = convs.find(c => c.id === convActiva)
+
+  useEffect(() => {
+    if (mensajesRef.current) mensajesRef.current.scrollTop = mensajesRef.current.scrollHeight
+  }, [convActiva, convs])
+
+  async function enviarMensaje() {
+    if (!mensaje.trim() || enviando) return
+    const texto = mensaje.trim()
+    setMensaje('')
+    setEnviando(true)
+
+    // Agregar mensaje del "propietario" (demo manual)
+    setConvs(prev => prev.map(c => c.id === convActiva
+      ? { ...c, mensajes: [...c.mensajes, { rol: 'propietario', texto, ts: new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) }] }
+      : c
+    ))
+
+    // Simular respuesta del bot
+    await new Promise(r => setTimeout(r, 1500))
+    const respuestas = {
+      'sí': '✅ ¡Excelente! Autorización registrada. ATP Chile ha sido notificado. ¡Gracias!',
+      'si': '✅ ¡Excelente! Autorización registrada. ATP Chile ha sido notificado. ¡Gracias!',
+      'no': 'Entendido. Para registrar el rechazo correctamente, ¿puedes indicarme brevemente el motivo?',
+      'default': 'Gracias por tu mensaje. Si tienes dudas sobre el proceso, puedes contactar directamente al equipo ATP Chile en contacto@primecorp.cl o al +56 9 5422 3960.'
+    }
+    const key = texto.toLowerCase().trim()
+    const respuesta = respuestas[key] || respuestas['default']
+
+    setConvs(prev => prev.map(c => c.id === convActiva
+      ? { ...c, mensajes: [...c.mensajes, { rol: 'bot', texto: respuesta, ts: new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) }] }
+      : c
+    ))
+    setEnviando(false)
+  }
+
+  const estadoColor = { autorizado: C.green, rechazado: C.red, pendiente: C.orange }
+  const estadoLabel = { autorizado: '✅ Autorizado', rechazado: '🚫 Rechazado', pendiente: '⏳ Pendiente' }
+
+  return (
+    <div style={{ animation: 'fadeIn 0.3s ease' }}>
+      <h2 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 700 }}>Canal WhatsApp con Inteligencia Artificial</h2>
+      <p style={{ color: C.textS, fontSize: 13, margin: '0 0 16px' }}>El asistente IA gestiona automáticamente las comunicaciones con propietarios de sitios vía WhatsApp.</p>
+
+      <div style={{ display: 'flex', gap: 0, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden', height: 580 }}>
+        {/* Panel izquierdo - lista conversaciones */}
+        <div style={{ width: 240, background: '#F0F2F5', borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '14px 14px 10px', background: '#128C7E', color: '#fff' }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>💬 WhatsApp Business</div>
+            <div style={{ fontSize: 11, opacity: 0.85 }}>ATP Chile · Propietarios</div>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {convs.map(c => (
+              <div key={c.id} onClick={() => setConvActiva(c.id)}
+                style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, cursor: 'pointer', background: convActiva === c.id ? '#fff' : 'transparent', borderLeft: convActiva === c.id ? '3px solid #128C7E' : '3px solid transparent' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 3 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{c.nombre}</div>
+                  <span style={{ fontSize: 9, fontWeight: 700, color: estadoColor[c.estado] }}>{estadoLabel[c.estado]}</span>
+                </div>
+                <div style={{ fontSize: 11, color: C.textS }}>{c.sitio}</div>
+                <div style={{ fontSize: 10, color: C.gray4 }}>{c.ts}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Panel derecho - chat */}
+        {conv && (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#E5DDD5' }}>
+            {/* Header chat */}
+            <div style={{ padding: '10px 16px', background: '#128C7E', color: '#fff', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 36, height: 36, background: '#25D366', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14 }}>
+                {conv.nombre.charAt(0)}
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{conv.nombre}</div>
+                <div style={{ fontSize: 11, opacity: 0.85 }}>{conv.tel} · {conv.sitio}</div>
+              </div>
+              <div style={{ marginLeft: 'auto', background: estadoColor[conv.estado] + '33', border: `1px solid ${estadoColor[conv.estado]}`, borderRadius: 10, padding: '2px 10px', fontSize: 11, fontWeight: 700, color: estadoColor[conv.estado] }}>
+                {estadoLabel[conv.estado]}
+              </div>
+            </div>
+
+            {/* Mensajes */}
+            <div ref={mensajesRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {conv.mensajes.map((m, i) => (
+                <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: m.rol === 'propietario' ? 'flex-end' : m.rol === 'sistema' ? 'center' : 'flex-start' }}>
+                  {m.rol === 'sistema' ? (
+                    <div style={{ background: 'rgba(0,0,0,0.1)', borderRadius: 10, padding: '4px 12px', fontSize: 10, color: '#666' }}>{m.texto}</div>
+                  ) : (
+                    <div style={{ maxWidth: '75%', background: m.rol === 'propietario' ? '#DCF8C6' : '#fff', borderRadius: m.rol === 'propietario' ? '10px 2px 10px 10px' : '2px 10px 10px 10px', padding: '8px 12px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                      {m.rol === 'bot' && <div style={{ fontSize: 10, fontWeight: 700, color: '#128C7E', marginBottom: 4 }}>🤖 Asistente ATP</div>}
+                      <div style={{ fontSize: 13, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{m.texto}</div>
+                      <div style={{ fontSize: 10, color: '#999', marginTop: 4, textAlign: 'right' }}>{m.ts}</div>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {enviando && (
+                <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+                  <div style={{ background: '#fff', borderRadius: '2px 10px 10px 10px', padding: '10px 14px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#128C7E', marginBottom: 4 }}>🤖 Asistente ATP</div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {[0, 1, 2].map(j => <div key={j} style={{ width: 8, height: 8, borderRadius: '50%', background: '#999', animation: `bounce 1s ${j * 0.2}s infinite` }} />)}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Input */}
+            <div style={{ padding: '10px 12px', background: '#F0F2F5', display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input value={mensaje} onChange={e => setMensaje(e.target.value)} onKeyDown={e => e.key === 'Enter' && enviarMensaje()}
+                placeholder="Simula respuesta del propietario..."
+                style={{ flex: 1, border: 'none', borderRadius: 20, padding: '9px 16px', fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
+              <button onClick={enviarMensaje} disabled={!mensaje.trim() || enviando}
+                style={{ width: 38, height: 38, background: '#25D366', border: 'none', borderRadius: '50%', cursor: mensaje.trim() ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: mensaje.trim() ? 1 : 0.5 }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Estadísticas */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginTop: 16 }}>
+        {[
+          ['💬', 'Conversaciones activas', convs.length, C.blue],
+          ['✅', 'Autorizaciones vía WA', convs.filter(c=>c.estado==='autorizado').length, C.green],
+          ['🚫', 'Rechazos con motivo', convs.filter(c=>c.estado==='rechazado').length, C.red],
+          ['🤖', 'Resueltas por IA', convs.filter(c=>c.estado!=='pendiente').length, C.purple],
+        ].map(([icon, label, val, color]) => (
+          <div key={label} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 6, padding: '12px 16px', borderTop: `3px solid ${color}` }}>
+            <div style={{ fontSize: 18, marginBottom: 3 }}>{icon}</div>
+            <div style={{ fontWeight: 800, fontSize: 22, color, fontFamily: 'monospace' }}>{val}</div>
+            <div style={{ fontSize: 10, color: C.textS, marginTop: 2 }}>{label}</div>
+          </div>
+        ))}
       </div>
     </div>
   )

@@ -168,3 +168,24 @@ export async function upsertReglaSitio(regla) {
   if (error) console.error(error)
   return !error
 }
+
+// ── DOCUMENTO MENSUAL (anti-solicitudes incorrectas) ───────────
+// Almacenado en localStorage para la demo
+export function getDocMensual() {
+  try {
+    const raw = localStorage.getItem('atp_doc_mensual')
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+export function saveDocMensual(doc) {
+  try {
+    localStorage.setItem('atp_doc_mensual', JSON.stringify({ ...doc, updatedAt: new Date().toISOString() }))
+    return true
+  } catch { return false }
+}
+
+export function getEmpresasAutorizadasMes() {
+  const doc = getDocMensual()
+  return doc?.empresasAutorizadas || []
+}

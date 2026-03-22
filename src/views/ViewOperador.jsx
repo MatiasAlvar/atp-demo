@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { supabase, getSolicitudes, upsertSolicitud, fromDb, getAlertas, getTrabajadores, getEmpresas, upsertEmpresa, upsertTrabajador, getSitiosConfig, getReglasSitios } from '../lib/supabase.js'
-import { SITIOS, COLOCALIZACIONES, EMPRESAS_DEFAULT, TIPOS_TRABAJO, VENTANA_MAX, TRABAJO_INFORMAL, ZONAS, ESTADO_COLOR, C, OP_COLOR, OP_SHORT, validarSolicitud, daysBetween, nextId, formatRUT, validRUT } from '../shared/data.js'
+import { supabase, getSolicitudes, upsertSolicitud, fromDb, getAlertas, getTrabajadores, getEmpresas, upsertEmpresa, upsertTrabajador, getSitiosConfig, getReglasSitios, getDocMensual } from '../lib/supabase.js'
+import { SITIOS, SITIOS_EXTRA, COLOCALIZACIONES, EMPRESAS_DEFAULT, TIPOS_TRABAJO, VENTANA_MAX, TRABAJO_INFORMAL, ZONAS, ESTADO_COLOR, C, OP_COLOR, OP_SHORT, validarSolicitud, daysBetween, nextId, formatRUT, validRUT } from '../shared/data.js'
 import { ATPLogo, Badge, AutoPill, FlowTracker, SolicitudCard, DetalleModal, Notif, GlobalStyle } from '../shared/components.jsx'
 import { enviarCorreoPropietario } from '../lib/email.js'
 
@@ -224,6 +224,7 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult]       = useState(null)
   const [empresaBusq, setEmpresaBusq] = useState(initialData?.empresa_contratista || '')
+  const [docsConfirmados, setDocsConfirmados] = useState([])
   const [showEmpresaDrop, setShowEmpresaDrop] = useState(false)
   const [showNuevaEmpresa, setShowNuevaEmpresa] = useState(false)
   const [nuevaEmpresa, setNuevaEmpresa] = useState({rut:'',nombre:''})
@@ -320,6 +321,28 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
     if (form.desde && form.hasta && form.sitio) {
       const reglaError = validarFechasConReglas(form.desde, form.hasta, form.sitio)
       if (reglaError) { showNotif(`❌ ${reglaError}`, 'error'); return }
+    }
+    // Validar documento mensual de autorización
+    const docMensual = getDocMensual()
+    if (docMensual && docMensual.empresasAutorizadas?.length > 0 && form.empresaNombre) {
+      const mesActual = new Date().toISOString().slice(0,7)
+      if (docMensual.mes === mesActual) {
+        const empAuth = docMensual.empresasAutorizadas.find(e =>
+          e.nombre.toLowerCase().includes(form.empresaNombre.toLowerCase()) ||
+          form.empresaNombre.toLowerCase().includes(e.nombre.toLowerCase())
+        )
+        if (!empAuth) {
+          showNotif(`❌ "${form.empresaNombre}" no está en el documento de empresas autorizadas para ${mesActual}. Contacte a ATP Chile.`, 'error')
+          return
+        }
+        if (empAuth.tiposAutorizados && empAuth.tiposAutorizados.length > 0 && form.trabajo) {
+          const workLabel = form.trabajo.split(' (máx')[0]
+          if (!empAuth.tiposAutorizados.some(t => workLabel.startsWith(t) || t.startsWith(workLabel))) {
+            showNotif(`❌ "${form.empresaNombre}" no está autorizada para "${workLabel}" este mes. Solo puede realizar: ${empAuth.tiposAutorizados.join(', ')}.`, 'error')
+            return
+          }
+        }
+      }
     }
     setSubmitting(true)
     await new Promise(r => setTimeout(r, 1200))
@@ -629,6 +652,29 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
           )
         })}
       </div>
+
+      {/* Documentos obligatorios del sitio */}
+      {form.sitio && (() => {
+        const regla = reglas[form.sitio]
+        if (!regla?.docs_requeridos?.length) return null
+        const pendientes = regla.docs_requeridos.filter(d => !docsConfirmados.includes(d))
+        return (
+          <div style={{background: C.white, border: `2px solid ${pendientes.length > 0 ? C.orange : C.green}`, borderRadius: 6, padding: 18, marginBottom: 14}}>
+            <div style={{fontWeight: 700, fontSize: 13, marginBottom: 10, color: pendientes.length > 0 ? C.orange : C.green}}>
+              {pendientes.length > 0 ? `📄 Documentación obligatoria — ${pendientes.length} pendiente(s)` : '✅ Documentación confirmada'}
+            </div>
+            <div style={{fontSize: 12, color: C.textS, marginBottom: 10}}>Este sitio requiere que confirmes tener los siguientes documentos antes de enviar:</div>
+            {regla.docs_requeridos.map(doc => (
+              <label key={doc} style={{display:'flex',alignItems:'center',gap:9,cursor:'pointer',padding:'6px 10px',marginBottom:4,borderRadius:4,background:docsConfirmados.includes(doc)?C.greenL:C.gray1,border:`1px solid ${docsConfirmados.includes(doc)?C.green:C.border}`}}>
+                <input type="checkbox" checked={docsConfirmados.includes(doc)} onChange={()=>setDocsConfirmados(p=>p.includes(doc)?p.filter(d=>d!==doc):[...p,doc])}/>
+                <span style={{fontSize:13,fontWeight:docsConfirmados.includes(doc)?600:400,color:docsConfirmados.includes(doc)?C.green:C.text}}>{doc}</span>
+                {docsConfirmados.includes(doc) && <span style={{marginLeft:'auto',color:C.green,fontSize:12}}>✓</span>}
+              </label>
+            ))}
+            {pendientes.length > 0 && <div style={{fontSize:11,color:C.orange,marginTop:6}}>⚠️ Debes confirmar todos los documentos para enviar la solicitud.</div>}
+          </div>
+        )
+      })()}
 
       <div style={{display:'flex',justifyContent:'flex-end',gap:12}}>
         <button onClick={onBack} style={{background:'transparent',color:C.red,border:'none',cursor:'pointer',fontWeight:600,fontSize:13,padding:'9px 16px'}}>Cancelar</button>
