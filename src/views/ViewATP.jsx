@@ -67,6 +67,7 @@ const TABS = [
   { id: 'dashboard',   label: 'Dashboard',       Icon: Ic.home    },
   { id: 'solicitudes', label: 'Solicitudes',      Icon: Ic.file    },
   { id: 'mapa',        label: 'Mapa de Sitios',   Icon: Ic.map     },
+  { id: 'sitios',      label: 'Sitios / Contactos', Icon: Ic.tower  },
   { id: 'whatsapp',    label: 'WhatsApp IA',       Icon: Ic.msg,    badge: true },
   { id: 'documentos',  label: 'Documentación',    Icon: Ic.shield  },
   { id: 'historial',   label: 'Historial',        Icon: Ic.history },
@@ -789,12 +790,16 @@ const TabWhatsApp = ({ sols, setSols }) => {
   const [apiKey, setApiKey]   = useState(localStorage.getItem('atp_apikey') || '')
   const [showKey, setShowKey] = useState(false)
 
+  const [sitiosConfig, setSitiosConfig] = useState({})
+  useEffect(() => { getSitiosConfig().then(setSitiosConfig) }, [])
+
   const waSols = useMemo(() =>
     sols.filter(s => {
+      const c = sitiosConfig[s.sitio]
       const site = SITES.find(x => x.id === s.sitio)
-      return site?.whatsapp
+      return c?.whatsapp || site?.whatsapp
     }),
-    [sols]
+    [sols, sitiosConfig]
   )
 
   const updateEstado = useCallback(async (id, estado, extra = {}) => {
@@ -892,7 +897,7 @@ const TabWhatsApp = ({ sols, setSols }) => {
             <WaChat
               key={sel.id}
               sol={sel}
-              site={SITES.find(x => x.id === sel.sitio)}
+              site={{...SITES.find(x => x.id === sel.sitio), ...sitiosConfig[sel.sitio]}}
               onUpdateEstado={updateEstado}
             />
           ) : (
@@ -1090,6 +1095,184 @@ const TabHistorial = ({ sols }) => {
 }
 
 /* ════════════════════════════════════════════════════════════
+   TAB SITIOS / CONTACTOS — editar propietario, tel, email, whatsapp
+   ════════════════════════════════════════════════════════════ */
+const TabSitios = () => {
+  const [q, setQ]             = useState('')
+  const [sel, setSel]         = useState(null)
+  const [cfg, setCfg]         = useState({})   // sitiosConfig desde Supabase
+  const [form, setForm]       = useState({})
+  const [saving, setSaving]   = useState(false)
+  const [saved, setSaved]     = useState(false)
+
+  useEffect(() => {
+    getSitiosConfig().then(data => setCfg(data))
+  }, [])
+
+  const filtered = useMemo(() => {
+    if (!q || q.length < 1) return SITES.slice(0, 80)
+    const ql = q.toLowerCase()
+    return SITES.filter(s =>
+      s.nombre.toLowerCase().includes(ql) ||
+      s.id.toLowerCase().includes(ql) ||
+      (s.region || '').toLowerCase().includes(ql) ||
+      (s.comuna || '').toLowerCase().includes(ql)
+    ).slice(0, 100)
+  }, [q])
+
+  const selectSitio = s => {
+    setSel(s)
+    setSaved(false)
+    const c = cfg[s.id] || {}
+    setForm({
+      propietario: c.propietario || s.propietario || '',
+      contacto:    c.contacto    || s.contacto    || '',
+      tel:         c.tel         || s.tel         || '',
+      email:       c.email       || s.email       || '',
+      whatsapp:    c.whatsapp    ?? false,
+      nota:        c.nota        || '',
+    })
+  }
+
+  const handleTel = v => {
+    let t = v.replace(/[^\d+]/g, '')
+    if (t && !t.startsWith('+')) t = '+56' + t.replace(/^56/, '')
+    setForm(f => ({ ...f, tel: t }))
+  }
+
+  const save = async () => {
+    if (!sel) return
+    setSaving(true)
+    await upsertSitioConfig({
+      sitio_id:    sel.id,
+      propietario: form.propietario,
+      contacto:    form.contacto,
+      tel:         form.tel,
+      email:       form.email,
+      whatsapp:    form.whatsapp,
+      nota:        form.nota,
+    })
+    setCfg(p => ({ ...p, [sel.id]: { ...form, sitio_id: sel.id } }))
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2500)
+  }
+
+  const inp = { padding: '9px 11px', borderRadius: 7, border: '1px solid #E5E7EB', fontSize: 13, fontFamily: 'IBM Plex Sans', width: '100%', outline: 'none', color: BK }
+  const lbl = { fontSize: 11, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 5, display: 'block' }
+
+  return (
+    <div className="fade-up" style={{ padding: 28, display: 'grid', gridTemplateColumns: '340px 1fr', gap: 16, alignItems: 'start' }}>
+      {/* Lista sitios */}
+      <Card style={{ overflow: 'hidden' }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid #F0F0F0' }}>
+          <input value={q} onChange={e => setQ(e.target.value)}
+            placeholder="Buscar sitio..."
+            style={{ ...inp, width: '100%' }} />
+          <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 6 }}>
+            {q ? `${filtered.length} resultados` : `${SITES.length} sitios totales`}
+          </div>
+        </div>
+        <div style={{ maxHeight: 560, overflowY: 'auto' }}>
+          {filtered.map(s => {
+            const hasCfg = !!cfg[s.id]
+            const hasWa  = cfg[s.id]?.whatsapp
+            return (
+              <div key={s.id} onClick={() => selectSitio(s)}
+                style={{
+                  padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid #F9FAFB',
+                  background: sel?.id === s.id ? G + '11' : 'transparent',
+                  borderLeft: `3px solid ${sel?.id === s.id ? G : 'transparent'}`,
+                }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span className="mono" style={{ fontSize: 10, color: G, fontWeight: 600 }}>{s.id}</span>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {hasWa  && <span style={{ fontSize: 9, background: '#DCFCE7', color: '#15803D', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>WA</span>}
+                    {hasCfg && <span style={{ fontSize: 9, background: '#DBEAFE', color: '#1D4ED8', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>CFG</span>}
+                  </div>
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: BK, marginTop: 1 }}>{s.nombre}</div>
+                <div style={{ fontSize: 11, color: '#9CA3AF' }}>{s.region} · {s.comuna}</div>
+              </div>
+            )
+          })}
+        </div>
+      </Card>
+
+      {/* Editor */}
+      {sel ? (
+        <Card style={{ overflow: 'hidden' }}>
+          <div style={{ padding: '14px 20px', background: BK, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div className="mono" style={{ fontSize: 11, color: G }}>{sel.id} · {sel.codigo}</div>
+              <div style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>{sel.nombre}</div>
+              <div style={{ color: 'rgba(255,255,255,.4)', fontSize: 12 }}>{sel.region} · {sel.tipo} · {sel.alturaTotal}m</div>
+            </div>
+          </div>
+          <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+              <div>
+                <label style={lbl}>Propietario / Empresa</label>
+                <input value={form.propietario} onChange={e => setForm(f => ({ ...f, propietario: e.target.value }))} style={inp} placeholder="Ej: Inmobiliaria Norte SpA" />
+              </div>
+              <div>
+                <label style={lbl}>Nombre contacto</label>
+                <input value={form.contacto} onChange={e => setForm(f => ({ ...f, contacto: e.target.value }))} style={inp} placeholder="Ej: Carlos Rojas" />
+              </div>
+              <div>
+                <label style={lbl}>Teléfono (WhatsApp)</label>
+                <input value={form.tel} onChange={e => handleTel(e.target.value)} style={{ ...inp, fontFamily: 'IBM Plex Mono' }} placeholder="+56 9 1234 5678" />
+                <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 3 }}>Se agrega +56 automáticamente</div>
+              </div>
+              <div>
+                <label style={lbl}>Email</label>
+                <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} style={inp} placeholder="propietario@email.cl" />
+              </div>
+            </div>
+            <div>
+              <label style={lbl}>Nota interna</label>
+              <textarea value={form.nota} onChange={e => setForm(f => ({ ...f, nota: e.target.value }))} rows={2}
+                style={{ ...inp, resize: 'vertical', lineHeight: 1.5 }} placeholder="Ej: Solicitar permiso con 48h de anticipación" />
+            </div>
+            {/* WhatsApp toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: form.whatsapp ? '#F0FDF4' : '#F9FAFB', borderRadius: 8, border: `1px solid ${form.whatsapp ? '#86EFAC' : '#E5E7EB'}` }}>
+              <button onClick={() => setForm(f => ({ ...f, whatsapp: !f.whatsapp }))}
+                style={{
+                  width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
+                  background: form.whatsapp ? WA : '#D1D5DB', position: 'relative', transition: 'background .2s',
+                }}>
+                <div style={{
+                  width: 18, height: 18, borderRadius: '50%', background: '#fff',
+                  position: 'absolute', top: 3, transition: 'left .2s',
+                  left: form.whatsapp ? 23 : 3,
+                }} />
+              </button>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: form.whatsapp ? '#15803D' : BK }}>
+                  {form.whatsapp ? '📲 WhatsApp activo' : 'WhatsApp desactivado'}
+                </div>
+                <div style={{ fontSize: 11, color: '#6B7280' }}>
+                  {form.whatsapp ? 'Las solicitudes en este sitio usarán IA WhatsApp para autorizar' : 'Activar para habilitar canal WhatsApp IA en este sitio'}
+                </div>
+              </div>
+            </div>
+            <Btn variant="primary" onClick={save} style={{ alignSelf: 'flex-start', minWidth: 160 }}>
+              {saving ? 'Guardando…' : saved ? '✓ Guardado' : 'Guardar cambios'}
+            </Btn>
+          </div>
+        </Card>
+      ) : (
+        <Card style={{ padding: 40, textAlign: 'center', color: '#9CA3AF' }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>🗼</div>
+          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6, color: BK }}>Selecciona un sitio</div>
+          <div style={{ fontSize: 13 }}>Busca y selecciona un sitio para editar sus datos de contacto y configurar WhatsApp.</div>
+        </Card>
+      )}
+    </div>
+  )
+}
+
+/* ════════════════════════════════════════════════════════════
    TAB CONFIGURACIÓN
    ════════════════════════════════════════════════════════════ */
 const TabConfig = () => {
@@ -1177,6 +1360,7 @@ const SECTIONS = {
   dashboard:   { title: 'Dashboard',            sub: 'Resumen operacional en tiempo real' },
   solicitudes: { title: 'Solicitudes de Acceso', sub: 'Flujo completo de autorizaciones' },
   mapa:        { title: 'Mapa de Sitios',        sub: 'Infraestructura ATP Chile · CartoDB Dark' },
+  sitios:      { title: 'Sitios / Contactos',    sub: 'Editar propietarios, teléfono, email y WhatsApp por sitio' },
   whatsapp:    { title: 'Canal WhatsApp IA',      sub: 'Autorización de propietarios vía IA · claude-sonnet-4-20250514' },
   documentos:  { title: 'Gestión Documental',    sub: 'Estado y vigencia de documentos' },
   historial:   { title: 'Historial y Reportes',  sub: 'Trazabilidad de visitas y accesos' },
@@ -1217,6 +1401,7 @@ export default function ViewATP({ onLogout }) {
       case 'dashboard':   return <TabDashboard   sols={sols} />
       case 'solicitudes': return <TabSolicitudes sols={sols} setSols={setSols} />
       case 'mapa':        return <TabMapa />
+      case 'sitios':      return <TabSitios />
       case 'whatsapp':    return <TabWhatsApp    sols={sols} setSols={setSols} />
       case 'documentos':  return <TabDocumentos />
       case 'historial':   return <TabHistorial   sols={sols} />
