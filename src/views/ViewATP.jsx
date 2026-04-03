@@ -3,8 +3,8 @@
    Leaflet cargado desde CDN — sin npm install
    ═══════════════════════════════════════════════════════════ */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { supabase } from '../lib/supabase'
-import { TODOS_SITIOS as SITES, EMPRESAS_INIT, COLOCALIZACIONES, ESTADO_COLOR } from '../shared/data'
+import { supabase, getSolicitudes, fromDb, updateEstado as supabaseUpdateEstado, getSitiosConfig, upsertSitioConfig } from '../lib/supabase'
+import { TODOS_SITIOS as SITES, COLOCALIZACIONES } from '../shared/data'
 import {
   G, BK, RD, WA, SB,
   ATPLogo, Ic, Badge, Card, CardHeader, Btn, Timeline, STATE_COLORS,
@@ -231,7 +231,7 @@ const TabDashboard = ({ sols }) => {
               <div key={i} style={{ padding: '12px 18px', borderBottom: i < 3 ? '1px solid #F9FAFB' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <div style={{ minWidth: 0 }}>
                   <div className="mono" style={{ fontSize: 11, color: G, fontWeight: 600 }}>{s.id}</div>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: BK, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.nombreSitio}</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: BK, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{SITES.find(x=>x.id===s.sitio)?.nombre||s.sitio}</div>
                 </div>
                 <Badge label={s.estado} />
               </div>
@@ -252,13 +252,13 @@ const TabSolicitudes = ({ sols, setSols }) => {
   const [motivo, setMotivo] = useState('')
 
   const approve = async id => {
-    await supabase?.from('solicitudes').update({ estado: 'APROBADA' }).eq('id', id)
+    await supabaseUpdateEstado(id, 'APROBADA')
     setSols(p => p.map(s => s.id === id ? { ...s, estado: 'APROBADA' } : s))
     if (sel?.id === id) setSel(p => ({ ...p, estado: 'APROBADA' }))
   }
   const reject = async id => {
     if (!motivo.trim()) return
-    await supabase?.from('solicitudes').update({ estado: 'RECHAZADA', motivo_rechazo: motivo }).eq('id', id)
+    await supabaseUpdateEstado(id, 'RECHAZADA', { motivo_rechazo: motivo })
     setSols(p => p.map(s => s.id === id ? { ...s, estado: 'RECHAZADA', motivoRechazo: motivo } : s))
     if (sel?.id === id) setSel(p => ({ ...p, estado: 'RECHAZADA', motivoRechazo: motivo }))
     setRechModal(null); setMotivo('')
@@ -270,7 +270,7 @@ const TabSolicitudes = ({ sols, setSols }) => {
       <div style={{ display: 'grid', gridTemplateColumns: sel ? '1fr 1.1fr' : '1fr', gap: 16, alignItems: 'start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {sols.map(s => {
-            const site = SITES.find(x => x.id === s.sitioId)
+            const site = SITES.find(x => x.id === s.sitio)
             return (
               <Card key={s.id} onClick={() => setSel(prev => prev?.id === s.id ? null : s)}
                 style={{
@@ -282,7 +282,7 @@ const TabSolicitudes = ({ sols, setSols }) => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                   <div>
                     <div className="mono" style={{ fontSize: 12, color: G, fontWeight: 600 }}>{s.id}</div>
-                    <div style={{ fontWeight: 700, fontSize: 15, color: BK, marginTop: 2 }}>{s.nombreSitio}</div>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: BK, marginTop: 2 }}>{SITES.find(x=>x.id===s.sitio)?.nombre||s.sitio}</div>
                   </div>
                   <Badge label={s.estado} />
                 </div>
@@ -303,7 +303,7 @@ const TabSolicitudes = ({ sols, setSols }) => {
             <div style={{ padding: '18px 22px', background: BK, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <div className="mono" style={{ fontSize: 12, color: G, fontWeight: 600 }}>{sel.id}</div>
-                <div style={{ color: '#fff', fontWeight: 700, fontSize: 18, marginTop: 2 }}>{sel.nombreSitio}</div>
+                <div style={{ color: '#fff', fontWeight: 700, fontSize: 18, marginTop: 2 }}>{SITES.find(x=>x.id===sel.sitio)?.nombre||sel.sitio}</div>
               </div>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <Badge label={sel.estado} />
@@ -316,7 +316,7 @@ const TabSolicitudes = ({ sols, setSols }) => {
               <Timeline estado={sel.estado} />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 14 }}>
                 {[
-                  { lbl: 'Sitio ID', val: sel.sitioId, mono: true },
+                  { lbl: 'Sitio ID', val: sel.sitio, mono: true },
                   { lbl: 'Empresa', val: sel.empresa },
                   { lbl: 'Fecha ingreso', val: `${sel.fechaIngreso} ${sel.horaIngreso}` },
                   { lbl: 'Fecha salida', val: `${sel.fechaSalida || '—'} ${sel.horaSalida || ''}` },
@@ -791,14 +791,14 @@ const TabWhatsApp = ({ sols, setSols }) => {
 
   const waSols = useMemo(() =>
     sols.filter(s => {
-      const site = SITES.find(x => x.id === s.sitioId)
+      const site = SITES.find(x => x.id === s.sitio)
       return site?.whatsapp
     }),
     [sols]
   )
 
   const updateEstado = useCallback(async (id, estado, extra = {}) => {
-    await supabase?.from('solicitudes').update({ estado, ...extra }).eq('id', id)
+    await supabaseUpdateEstado(id, estado, extra)
     setSols(p => p.map(s => s.id === id ? { ...s, estado, ...extra } : s))
   }, [setSols])
 
@@ -854,7 +854,7 @@ const TabWhatsApp = ({ sols, setSols }) => {
                 Sin solicitudes WhatsApp activas
               </div>
             ) : waSols.map((s, i) => {
-              const site = SITES.find(x => x.id === s.sitioId)
+              const site = SITES.find(x => x.id === s.sitio)
               const pend = PENDING_ESTADO.includes(s.estado)
               const on   = sel?.id === s.id
               return (
@@ -873,7 +873,7 @@ const TabWhatsApp = ({ sols, setSols }) => {
                     <div className="mono" style={{ fontSize: 10, color: G, fontWeight: 600 }}>{s.id}</div>
                     <Badge label={s.estado} />
                   </div>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: BK, marginBottom: 3 }}>{s.nombreSitio}</div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: BK, marginBottom: 3 }}>{SITES.find(x=>x.id===s.sitio)?.nombre||s.sitio}</div>
                   <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.tipoTrabajo}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
                     {pend && <span style={{ width: 7, height: 7, borderRadius: '50%', background: WA, flexShrink: 0, display: 'inline-block' }} />}
@@ -892,7 +892,7 @@ const TabWhatsApp = ({ sols, setSols }) => {
             <WaChat
               key={sel.id}
               sol={sel}
-              site={SITES.find(x => x.id === sel.sitioId)}
+              site={SITES.find(x => x.id === sel.sitio)}
               onUpdateEstado={updateEstado}
             />
           ) : (
@@ -1012,8 +1012,8 @@ const TabHistorial = ({ sols }) => {
 
   const filtered = sols.filter(s => {
     if (fil.estado && s.estado !== fil.estado) return false
-    if (fil.sitio  && s.sitioId !== fil.sitio) return false
-    if (fil.q && !s.id.toLowerCase().includes(fil.q.toLowerCase()) && !s.nombreSitio.toLowerCase().includes(fil.q.toLowerCase())) return false
+    if (fil.sitio  && s.sitio !== fil.sitio) return false
+    if (fil.q && !s.id.toLowerCase().includes(fil.q.toLowerCase()) && !SITES.find(x=>x.id===s.sitio)?.nombre||s.sitio.toLowerCase().includes(fil.q.toLowerCase())) return false
     return true
   })
   const paged = filtered.slice((pg - 1) * PP, pg * PP)
@@ -1054,7 +1054,7 @@ const TabHistorial = ({ sols }) => {
               : paged.map((s, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid #F0F0F0' }}>
                   <td className="mono" style={{ padding: '13px 16px', fontSize: 12, color: G, fontWeight: 600 }}>{s.id}</td>
-                  <td style={{ padding: '13px 16px', fontSize: 13, fontWeight: 600, color: BK }}>{s.nombreSitio}</td>
+                  <td style={{ padding: '13px 16px', fontSize: 13, fontWeight: 600, color: BK }}>{SITES.find(x=>x.id===s.sitio)?.nombre||s.sitio}</td>
                   <td style={{ padding: '13px 16px', fontSize: 12, color: '#6B7280', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.tipoTrabajo}</td>
                   <td className="mono" style={{ padding: '13px 16px', fontSize: 12, color: '#374151' }}>{s.fechaIngreso}</td>
                   <td style={{ padding: '13px 16px', fontSize: 12, color: '#374151' }}>{s.empresa}</td>
@@ -1185,24 +1185,26 @@ const SECTIONS = {
 
 export default function ViewATP({ onLogout }) {
   const [tab,  setTab]  = useState('dashboard')
-  const [sols, setSols] = useState(EMPRESAS_INIT ?? [])
+  const [sols, setSols] = useState([])
 
-  // Supabase realtime
+  // Carga inicial + realtime Supabase
   useEffect(() => {
+    getSolicitudes().then(data => setSols(data.map(fromDb)))
+
     const channel = supabase
-      ?.channel('solicitudes-atp')
+      .channel('solicitudes-atp')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'solicitudes' }, payload => {
-        if (payload.eventType === 'INSERT') setSols(p => [payload.new, ...p])
-        if (payload.eventType === 'UPDATE') setSols(p => p.map(s => s.id === payload.new.id ? payload.new : s))
+        if (payload.eventType === 'INSERT') setSols(p => [fromDb(payload.new), ...p])
+        if (payload.eventType === 'UPDATE') setSols(p => p.map(s => s.id === payload.new.id ? fromDb(payload.new) : s))
         if (payload.eventType === 'DELETE') setSols(p => p.filter(s => s.id !== payload.old.id))
       })
       .subscribe()
-    return () => { supabase?.removeChannel(channel) }
+    return () => { supabase.removeChannel(channel) }
   }, [])
 
   const pendWa = useMemo(() =>
     sols.filter(s => {
-      const site = SITES.find(x => x.id === s.sitioId)
+      const site = SITES.find(x => x.id === s.sitio)
       return site?.whatsapp && PENDING_ESTADO.includes(s.estado)
     }).length,
     [sols]
