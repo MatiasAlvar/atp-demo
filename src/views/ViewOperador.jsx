@@ -205,6 +205,100 @@ function SolRow({ s, onClick }) {
 
 // ── FORMULARIO ────────────────────────────────────────────────
 
+
+/* ─── DATE RANGE PICKER — bloquea fechas ocupadas ─────────── */
+function DateRangePicker({ desde, hasta, onDesde, onHasta, fechasOcupadas, C }) {
+  const [mes, setMes] = useState(() => {
+    const d = desde ? new Date(desde + 'T12:00:00') : new Date()
+    return new Date(d.getFullYear(), d.getMonth(), 1)
+  })
+
+  const hoy = new Date().toISOString().split('T')[0]
+
+  function isBlocked(iso) {
+    return fechasOcupadas.some(r => iso >= r.desde && iso <= r.hasta)
+  }
+  function isPast(iso) { return iso < hoy }
+  function isSelected(iso) { return iso === desde || iso === hasta }
+  function isInRange(iso) { return desde && hasta && iso > desde && iso < hasta }
+  function isConflict(iso) { return isInRange(iso) && isBlocked(iso) }
+
+  function handleClick(iso) {
+    if (isBlocked(iso) || isPast(iso)) return
+    if (!desde || (desde && hasta)) {
+      onDesde(iso); onHasta('')
+    } else {
+      if (iso < desde) { onDesde(iso); onHasta('') }
+      else {
+        // Check no blocked dates in range
+        const hasBlock = fechasOcupadas.some(r => !(iso < r.desde || desde > r.hasta))
+        if (hasBlock) return
+        onHasta(iso)
+      }
+    }
+  }
+
+  const year = mes.getFullYear(), month = mes.getMonth()
+  const firstDay = new Date(year, month, 1).getDay()
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const days = []
+  for (let i = 0; i < (firstDay === 0 ? 6 : firstDay - 1); i++) days.push(null)
+  for (let d = 1; d <= daysInMonth; d++) {
+    const iso = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+    days.push(iso)
+  }
+
+  const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+  const DIAS = ['Lu','Ma','Mi','Ju','Vi','Sa','Do']
+
+  return (
+    <div style={{border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden',background:C.white}}>
+      {/* Header mes */}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',background:C.gray1,borderBottom:`1px solid ${C.border}`}}>
+        <button onClick={()=>setMes(new Date(year,month-1,1))} style={{background:'none',border:'none',cursor:'pointer',fontSize:16,color:C.textS,padding:'2px 8px'}}>‹</button>
+        <span style={{fontWeight:700,fontSize:13}}>{MESES[month]} {year}</span>
+        <button onClick={()=>setMes(new Date(year,month+1,1))} style={{background:'none',border:'none',cursor:'pointer',fontSize:16,color:C.textS,padding:'2px 8px'}}>›</button>
+      </div>
+      {/* Días semana */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',textAlign:'center',padding:'6px 8px 2px'}}>
+        {DIAS.map(d=><div key={d} style={{fontSize:10,fontWeight:700,color:C.textS,padding:'2px 0'}}>{d}</div>)}
+      </div>
+      {/* Días */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',padding:'0 8px 10px',gap:2}}>
+        {days.map((iso,i) => {
+          if (!iso) return <div key={i}/>
+          const blocked  = isBlocked(iso)
+          const past     = isPast(iso)
+          const selStart = iso === desde
+          const selEnd   = iso === hasta
+          const inRange  = isInRange(iso)
+          const disabled = blocked || past
+          const bg = selStart||selEnd ? C.red : inRange ? C.redL : blocked ? '#FFCDD2' : 'transparent'
+          const color = selStart||selEnd ? '#fff' : blocked ? C.red : past ? C.gray3 : C.text
+          const title = blocked ? `Fecha reservada` : ''
+          return (
+            <div key={iso} title={title} onClick={()=>handleClick(iso)} style={{
+              textAlign:'center',padding:'5px 2px',borderRadius:4,fontSize:12,fontWeight:(selStart||selEnd)?700:400,
+              background:bg,color,cursor:disabled?'not-allowed':'pointer',
+              border:selStart||selEnd?`1px solid ${C.red}`:'1px solid transparent',
+              position:'relative',
+            }}>
+              {iso.split('-')[2].replace(/^0/,'')}
+              {blocked && <div style={{position:'absolute',bottom:1,left:'50%',transform:'translateX(-50%)',width:4,height:4,borderRadius:'50%',background:C.red}}/>}
+            </div>
+          )
+        })}
+      </div>
+      {/* Leyenda */}
+      <div style={{padding:'6px 14px 10px',display:'flex',gap:14,fontSize:11,color:C.textS,borderTop:`1px solid ${C.border}`}}>
+        <div style={{display:'flex',alignItems:'center',gap:4}}><div style={{width:10,height:10,borderRadius:2,background:'#FFCDD2'}}/> Bloqueado</div>
+        <div style={{display:'flex',alignItems:'center',gap:4}}><div style={{width:10,height:10,borderRadius:2,background:C.red}}/> Seleccionado</div>
+        <div style={{display:'flex',alignItems:'center',gap:4}}><div style={{width:10,height:10,borderRadius:2,background:C.redL}}/> Rango</div>
+      </div>
+    </div>
+  )
+}
+
 /* ─── SITIO SEARCHBOX — combobox con 772 sitios ─────────── */
 function SitioSearchBox({ sitios, value, onChange, inp, C }) {
   const [q, setQ] = useState('')
@@ -640,15 +734,15 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
         {/* Trabajo + Fechas */}
         <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:18}}>
           <div style={{fontWeight:600,fontSize:13,marginBottom:12,paddingBottom:8,borderBottom:`1px solid ${C.border}`}}>Información del Requerimiento</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-            <div><label style={lbl}>Fecha inicio <span style={{color:C.red}}>*</span></label><input type="date" min={new Date().toISOString().split("T")[0]} value={form.desde} onChange={e=>set('desde',e.target.value)} style={{...inp,borderColor:hayConflictoFechas(form.desde,form.hasta)?C.red:undefined}}/></div>
-            <div><label style={lbl}>Fecha fin <span style={{color:C.red}}>*</span></label><input type="date" min={form.desde||new Date().toISOString().split("T")[0]} value={form.hasta} onChange={e=>set('hasta',e.target.value)} style={inp}/></div>
+          <div style={{marginBottom:10}}>
+            <label style={lbl}>Fechas de acceso <span style={{color:C.red}}>*</span></label>
+            {form.desde && form.hasta && <div style={{fontSize:12,color:C.green,marginBottom:6,fontWeight:600}}>📅 {form.desde} → {form.hasta}</div>}
+            <DateRangePicker
+              desde={form.desde} hasta={form.hasta}
+              onDesde={v=>set('desde',v)} onHasta={v=>set('hasta',v)}
+              fechasOcupadas={fechasOcupadas} C={C}
+            />
           </div>
-          {form.desde && form.hasta && hayConflictoFechas(form.desde, form.hasta) && (
-            <div style={{background:'#FEE2E2',border:'1px solid #FECACA',borderRadius:4,padding:'8px 12px',fontSize:12,color:'#B91C1C',marginBottom:10}}>
-              ⛔ Estas fechas se superponen con {hayConflictoFechas(form.desde,form.hasta)?.id}. Elige otras fechas.
-            </div>
-          )}
           {/* Aviso inline de reglas del sitio */}
           {form.desde && form.hasta && form.sitio && (() => {
             const err = validarFechasConReglas(form.desde, form.hasta, form.sitio)
