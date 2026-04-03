@@ -522,8 +522,8 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
     setFechasOcupadas([])
     if (!sitioId) return
     // Verificar si sitio está bloqueado
-    const cfg = sitiosConfig[sitioId]
-    if (cfg?.bloqueado) {
+    const cfgBloqueo = sitiosConfig[sitioId]
+    if (cfgBloqueo?.bloqueado) {
       setSitioBloquedoModal({ motivo: cfg.motivo_bloqueo || 'Este sitio está temporalmente bloqueado por ATP Chile.' })
       set('sitio', '')
       return
