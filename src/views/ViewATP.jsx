@@ -4,7 +4,7 @@
    ═══════════════════════════════════════════════════════════ */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
-import { SITES, SOLICITUDES_INIT, DOCS_EMP, DOCS_TRAB, COLOCALIZACIONES } from '../shared/data'
+import { TODOS_SITIOS as SITES, EMPRESAS_INIT, COLOCALIZACIONES, ESTADO_COLOR } from '../shared/data'
 import {
   G, BK, RD, WA, SB,
   ATPLogo, Ic, Badge, Card, CardHeader, Btn, Timeline, STATE_COLORS,
@@ -156,7 +156,7 @@ const TabDashboard = ({ sols }) => {
   const apr  = sols.filter(s => s.estado === 'APROBADA').length
   const rec  = sols.filter(s => s.estado === 'RECHAZADA').length
   const act  = SITES.filter(s => s.estado === 'ocupado').length
-  const alertas = [...DOCS_EMP, ...DOCS_TRAB].filter(d => d.estado !== 'vigente')
+  const alertas = []
 
   return (
     <div className="fade-up" style={{ padding: 28 }}>
@@ -834,7 +834,7 @@ const TabWhatsApp = ({ sols, setSols }) => {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', flex: 1, overflow: 'hidden', margin: 16, gap: 0, borderRadius: 12, overflow: 'hidden', border: '1px solid #E5E7EB', boxShadow: '0 4px 24px rgba(0,0,0,.08)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', flex: 1, margin: 16, gap: 0, borderRadius: 12, overflow: 'hidden', border: '1px solid #E5E7EB', boxShadow: '0 4px 24px rgba(0,0,0,.08)' }}>
         {/* Lista solicitudes */}
         <div style={{ borderRight: '1px solid #E5E7EB', background: '#fff', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{
@@ -930,6 +930,8 @@ const TabWhatsApp = ({ sols, setSols }) => {
    ════════════════════════════════════════════════════════════ */
 const TabDocumentos = () => {
   const [tab, setTab] = useState('empresa')
+  const DOCS_EMP  = []
+  const DOCS_TRAB = []
   const allDocs = [...DOCS_EMP, ...DOCS_TRAB]
   const venc  = allDocs.filter(d => d.estado === 'vencido').length
   const xVenc = allDocs.filter(d => d.estado === 'por vencer').length
@@ -1183,7 +1185,7 @@ const SECTIONS = {
 
 export default function ViewATP({ onLogout }) {
   const [tab,  setTab]  = useState('dashboard')
-  const [sols, setSols] = useState(SOLICITUDES_INIT ?? [])
+  const [sols, setSols] = useState(EMPRESAS_INIT ?? [])
 
   // Supabase realtime
   useEffect(() => {
