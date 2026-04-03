@@ -16,6 +16,7 @@ const fmtDur = (ms) => {
 
 
 const APIKEY_KEY = 'atp_apikey'
+const isValidEmail = v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
 
 export default function ViewOperador({ user, onLogout }) {
   const [view, setView]             = useState('lista')
@@ -668,7 +669,7 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
       {estado:'Validado',              fecha: new Date().toLocaleString('es-CL'), auto:true},
       {estado:'En Gestión Propietario',fecha: new Date().toLocaleString('es-CL'), auto:true},
     ]
-    const sitio = TODOS_SITIOS.find(s => s.id === form.sitio)
+    const sitio = { ...TODOS_SITIOS.find(s => s.id === form.sitio), ...sitiosConfig[form.sitio] }
     const sol = {
       id: nextId(solicitudes),
       ...form,
@@ -702,7 +703,12 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
             vencimiento: '',
             motivo_no_acreditado: 'Pendiente revisión',
           }
-          await upsertTrabajador(nuevo)
+          try {
+            await supabase.from('trabajadores_acreditados').upsert(
+              { rut: nuevo.rut, nombre: nuevo.nombre, empresa_nombre: nuevo.empresa_nombre, operador: nuevo.operador, acreditado: null, vencimiento: '', motivo_no_acreditado: 'Pendiente revisión' },
+              { onConflict: 'rut', ignoreDuplicates: true }
+            )
+          } catch(err) { console.error('upsert trabajador:', err) }
           setTrabajadores(prev => {
             if (prev.some(w => w.rut === t.rut)) return prev
             return [...prev, nuevo]
@@ -867,8 +873,16 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
           <input value={form.refCliente} onChange={e=>set('refCliente',e.target.value)} placeholder="Ej: TEF-2026-0234" style={{...inp,maxWidth:360}}/>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-          <div><label style={lbl}>Correo Mandante ({OP_SHORT[user.operador]}) <span style={{color:C.red}}>*</span></label><input type="email" value={form.correoMandante} onChange={e=>set('correoMandante',e.target.value)} placeholder="accesos@empresa.cl" style={{...inp,borderColor:!form.correoMandante?C.border+'':C.border}}/></div>
-          <div><label style={lbl}>Correo Contratista <span style={{color:C.red}}>*</span></label><input type="email" value={form.correoContratista} onChange={e=>set('correoContratista',e.target.value)} placeholder="ops@contratista.cl" style={inp}/></div>
+          <div>
+            <label style={lbl}>Correo Mandante ({OP_SHORT[user.operador]}) <span style={{color:C.red}}>*</span></label>
+            <input type="email" value={form.correoMandante} onChange={e=>set('correoMandante',e.target.value)} placeholder="accesos@empresa.cl" style={{...inp,borderColor:form.correoMandante&&!isValidEmail(form.correoMandante)?C.red:C.border}}/>
+            {form.correoMandante && !isValidEmail(form.correoMandante) && <div style={{fontSize:11,color:C.red,marginTop:3}}>⛔ Ingresa un correo válido (ej: nombre@empresa.cl)</div>}
+          </div>
+          <div>
+            <label style={lbl}>Correo Contratista <span style={{color:C.red}}>*</span></label>
+            <input type="email" value={form.correoContratista} onChange={e=>set('correoContratista',e.target.value)} placeholder="ops@contratista.cl" style={{...inp,borderColor:form.correoContratista&&!isValidEmail(form.correoContratista)?C.red:C.border}}/>
+            {form.correoContratista && !isValidEmail(form.correoContratista) && <div style={{fontSize:11,color:C.red,marginTop:3}}>⛔ Ingresa un correo válido (ej: nombre@empresa.cl)</div>}
+          </div>
         </div>
       </div>
 
@@ -1076,15 +1090,15 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
 
       <div style={{display:'flex',justifyContent:'flex-end',gap:12}}>
         <button onClick={onBack} style={{background:'transparent',color:C.red,border:'none',cursor:'pointer',fontWeight:600,fontSize:13,padding:'9px 16px'}}>Cancelar</button>
-        {(!form.correoMandante || !form.correoContratista) && (
+        {(!isValidEmail(form.correoMandante) || !isValidEmail(form.correoContratista)) && (
           <span style={{fontSize:12,color:C.orange,alignSelf:'center'}}>⚠ Completa los correos para continuar</span>
         )}
         <button onClick={handleSubmit}
-          disabled={submitting || !!hayConflictoFechas(form.desde,form.hasta) || !form.correoMandante || !form.correoContratista}
-          style={{background:(submitting||hayConflictoFechas(form.desde,form.hasta)||!form.correoMandante||!form.correoContratista)?C.gray3:C.red,
-            color:(submitting||!form.correoMandante||!form.correoContratista)?C.gray4:'#fff',
+          disabled={submitting || !!hayConflictoFechas(form.desde,form.hasta) || !isValidEmail(form.correoMandante) || !isValidEmail(form.correoContratista)}
+          style={{background:(submitting||hayConflictoFechas(form.desde,form.hasta)||!isValidEmail(form.correoMandante)||!isValidEmail(form.correoContratista))?C.gray3:C.red,
+            color:(submitting||!isValidEmail(form.correoMandante)||!isValidEmail(form.correoContratista))?C.gray4:'#fff',
             border:'none',borderRadius:4,padding:'9px 24px',fontWeight:700,
-            cursor:(submitting||!form.correoMandante||!form.correoContratista)?'not-allowed':'pointer',fontSize:13}}>
+            cursor:(submitting||!isValidEmail(form.correoMandante)||!isValidEmail(form.correoContratista))?'not-allowed':'pointer',fontSize:13}}>
           {submitting ? '⚡ Validando...' : 'Enviar Solicitud →'}
         </button>
       </div>

@@ -70,6 +70,7 @@ const TABS = [
   { id: 'sitios',      label: 'Sitios / Contactos', Icon: Ic.tower  },
   { id: 'whatsapp',    label: 'WhatsApp IA',       Icon: Ic.msg,    badge: true },
   { id: 'documentos',  label: 'Documentación',    Icon: Ic.shield  },
+  { id: 'docs_sitios', label: 'Docs para Sitios',  Icon: Ic.file    },
   { id: 'historial',   label: 'Historial',        Icon: Ic.history },
   { id: 'config',      label: 'Configuración',    Icon: Ic.settings },
 ]
@@ -1200,13 +1201,14 @@ const TabSitios = () => {
     setSaved(false)
     const c = cfg[s.id] || {}
     setForm({
-      propietario:   c.propietario   || s.propietario || '',
-      contacto:      c.contacto      || s.contacto    || '',
-      tel:           c.tel           || s.tel         || '',
-      email:         c.email         || s.email       || '',
-      whatsapp:      c.whatsapp      ?? false,
-      nota:          c.nota          || '',
-      bloqueado:     c.bloqueado     ?? false,
+      propietario:    c.propietario   || s.propietario || '',
+      contacto:       c.contacto      || s.contacto    || '',
+      tel:            c.tel           || s.tel         || '',
+      email:          c.email         || s.email       || '',
+      whatsapp:       c.whatsapp      ?? false,
+      correo_activo:  c.correo_activo ?? true,
+      nota:           c.nota          || '',
+      bloqueado:      c.bloqueado     ?? false,
       motivo_bloqueo: c.motivo_bloqueo || '',
       docs_requeridos: c.docs_requeridos || [],
     })
@@ -1228,6 +1230,7 @@ const TabSitios = () => {
       tel:            form.tel,
       email:          form.email,
       whatsapp:       form.whatsapp,
+      correo_activo:  form.correo_activo,
       nota:           form.nota,
       bloqueado:      form.bloqueado,
       motivo_bloqueo: form.motivo_bloqueo || '',
@@ -1337,6 +1340,22 @@ const TabSitios = () => {
                 </div>
               </div>
             </div>
+            {/* Correo activo/inactivo */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: form.correo_activo ? '#EFF6FF' : '#F9FAFB', borderRadius: 8, border: `1px solid ${form.correo_activo ? '#BFDBFE' : '#E5E7EB'}` }}>
+              <button onClick={() => setForm(f => ({ ...f, correo_activo: !f.correo_activo }))}
+                style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', background: form.correo_activo ? '#3B82F6' : '#D1D5DB', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
+                <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, transition: 'left .2s', left: form.correo_activo ? 23 : 3 }} />
+              </button>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: form.correo_activo ? '#1D4ED8' : BK }}>
+                  {form.correo_activo ? '✉️ Correo activo' : 'Correo desactivado'}
+                </div>
+                <div style={{ fontSize: 11, color: '#6B7280' }}>
+                  {form.correo_activo ? 'Se enviará correo al propietario cuando haya solicitudes' : 'No se enviará correo a este propietario'}
+                </div>
+              </div>
+            </div>
+
             {/* Bloqueo de sitio */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '14px 16px', background: form.bloqueado ? '#FEF2F2' : '#F9FAFB', borderRadius: 8, border: `1px solid ${form.bloqueado ? '#FECACA' : '#E5E7EB'}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -1365,7 +1384,7 @@ const TabSitios = () => {
             <div style={{ padding: '14px 16px', background: '#F0F9FF', borderRadius: 8, border: '1px solid #BAE6FD' }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#0369A1', marginBottom: 10 }}>📋 Documentos requeridos en este sitio</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                {(TIPOS_DOCS_SITIO || []).map(doc => (
+                {([...(TIPOS_DOCS_SITIO||[]), ...(() => { try { return JSON.parse(localStorage.getItem(DOCS_STORAGE_KEY)||'[]') } catch { return [] } })()]).map(doc => (
                   <label key={doc} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, padding: '6px 8px', borderRadius: 5, background: (form.docs_requeridos||[]).includes(doc) ? '#DBEAFE' : '#fff', border: `1px solid ${(form.docs_requeridos||[]).includes(doc) ? '#93C5FD' : '#E5E7EB'}` }}>
                     <input type="checkbox" checked={(form.docs_requeridos||[]).includes(doc)}
                       onChange={e => setForm(f => ({
@@ -1398,6 +1417,95 @@ const TabSitios = () => {
           <div style={{ fontSize: 13 }}>Busca y selecciona un sitio para editar sus datos de contacto y configurar WhatsApp.</div>
         </Card>
       )}
+    </div>
+  )
+}
+
+
+/* ════════════════════════════════════════════════════════════
+   TAB DOCS PARA SITIOS — gestionar tipos de documentos
+   ════════════════════════════════════════════════════════════ */
+const DOCS_STORAGE_KEY = 'atp_tipos_docs_custom'
+
+const TabDocsSitios = () => {
+  const [docs, setDocs]       = useState(() => {
+    try { return JSON.parse(localStorage.getItem(DOCS_STORAGE_KEY) || '[]') }
+    catch { return [] }
+  })
+  const [nuevoDoc, setNuevoDoc] = useState('')
+  const [saved, setSaved]       = useState(false)
+
+  const allDocs = [...(TIPOS_DOCS_SITIO || []), ...docs]
+
+  const agregar = () => {
+    const nombre = nuevoDoc.trim()
+    if (!nombre || allDocs.includes(nombre)) return
+    const next = [...docs, nombre]
+    setDocs(next)
+    localStorage.setItem(DOCS_STORAGE_KEY, JSON.stringify(next))
+    setNuevoDoc('')
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  const eliminar = (doc) => {
+    if (TIPOS_DOCS_SITIO?.includes(doc)) return // no eliminar los base
+    const next = docs.filter(d => d !== doc)
+    setDocs(next)
+    localStorage.setItem(DOCS_STORAGE_KEY, JSON.stringify(next))
+  }
+
+  return (
+    <div className="fade-up" style={{ padding: 28, maxWidth: 680 }}>
+      <Card style={{ overflow: 'hidden' }}>
+        <CardHeader title="Documentos para Sitios" icon={Ic.file} />
+        <div style={{ padding: 24 }}>
+          <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 20, lineHeight: 1.6 }}>
+            Gestiona los tipos de documentos disponibles para asignar a cada sitio en <strong>Sitios / Contactos</strong>.<br/>
+            Los documentos base (precargados) no se pueden eliminar. Puedes agregar los que necesites.
+          </div>
+
+          {/* Agregar nuevo */}
+          <div style={{ display: 'flex', gap: 10, marginBottom: 24 }}>
+            <input
+              value={nuevoDoc}
+              onChange={e => setNuevoDoc(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && agregar()}
+              placeholder="Ej: Permiso municipal de acceso, Seguro de vida vigente..."
+              style={{ flex: 1, padding: '10px 13px', borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 13, fontFamily: 'IBM Plex Sans', outline: 'none' }}
+            />
+            <Btn variant="primary" onClick={agregar} icon={Ic.plus}>Agregar</Btn>
+          </div>
+          {saved && <div style={{ fontSize: 12, color: '#15803D', marginBottom: 12 }}>✓ Documento agregado</div>}
+
+          {/* Lista completa */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {allDocs.map((doc, i) => {
+              const esBase = TIPOS_DOCS_SITIO?.includes(doc)
+              return (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 7, background: esBase ? '#F0F9FF' : '#FAFAFA', border: `1px solid ${esBase ? '#BAE6FD' : '#E5E7EB'}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 3, background: esBase ? '#DBEAFE' : '#F3F4F6', color: esBase ? '#1D4ED8' : '#6B7280', fontWeight: 600 }}>
+                      {esBase ? 'Base' : 'Custom'}
+                    </span>
+                    <span style={{ fontSize: 13, color: '#1A1A1A' }}>{doc}</span>
+                  </div>
+                  {!esBase && (
+                    <button onClick={() => eliminar(doc)}
+                      style={{ background: '#FEE2E2', border: 'none', borderRadius: 5, padding: '4px 8px', cursor: 'pointer', color: '#B91C1C', fontSize: 12, fontWeight: 600 }}>
+                      Eliminar
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          <div style={{ marginTop: 16, padding: '10px 14px', background: '#FFFBEB', borderRadius: 8, border: '1px solid #FCD34D', fontSize: 12, color: '#92400E' }}>
+            💡 Los documentos personalizados se guardan localmente. Para que aparezcan en "Sitios / Contactos" debes estar en el mismo navegador.
+          </div>
+        </div>
+      </Card>
     </div>
   )
 }
@@ -1493,6 +1601,7 @@ const SECTIONS = {
   sitios:      { title: 'Sitios / Contactos',    sub: 'Editar propietarios, teléfono, email y WhatsApp por sitio' },
   whatsapp:    { title: 'Canal WhatsApp IA',      sub: 'Autorización de propietarios vía IA · claude-sonnet-4-20250514' },
   documentos:  { title: 'Gestión Documental',    sub: 'Estado y vigencia de documentos' },
+  docs_sitios: { title: 'Documentos para Sitios', sub: 'Agregar tipos de documentos requeridos por sitio' },
   historial:   { title: 'Historial y Reportes',  sub: 'Trazabilidad de visitas y accesos' },
   config:      { title: 'Configuración',         sub: 'API Key, variables de entorno y sistema' },
 }
@@ -1534,6 +1643,7 @@ export default function ViewATP({ onLogout }) {
       case 'sitios':      return <TabSitios />
       case 'whatsapp':    return <TabWhatsApp    sols={sols} setSols={setSols} />
       case 'documentos':  return <TabDocumentos />
+      case 'docs_sitios': return <TabDocsSitios />
       case 'historial':   return <TabHistorial   sols={sols} />
       case 'config':      return <TabConfig />
       default:            return <TabDashboard   sols={sols} />
