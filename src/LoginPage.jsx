@@ -37,7 +37,9 @@ export default function LoginPage({ onLogin }) {
       setLoading(false)
       return
     }
-    onLogin({ usuario: user.trim().toLowerCase(), ...acc })
+    const username = user.trim().toLowerCase()
+    const { USERS } = await import('./shared/data.js')
+    onLogin({ username, ...acc, ...(USERS?.[username] || {}) })
     setLoading(false)
   }
 
