@@ -524,7 +524,7 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
     // Verificar si sitio está bloqueado
     const cfgBloqueo = sitiosConfig[sitioId]
     if (cfgBloqueo?.bloqueado) {
-      setSitioBloquedoModal({ motivo: cfg.motivo_bloqueo || 'Este sitio está temporalmente bloqueado por ATP Chile.' })
+      setSitioBloquedoModal({ motivo: cfgBloqueo.motivo_bloqueo || 'Este sitio está temporalmente bloqueado por ATP Chile.' })
       set('sitio', '')
       return
     }
@@ -915,10 +915,11 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
             <label style={lbl}>Fechas de acceso <span style={{color:C.red}}>*</span></label>
             {form.desde && form.hasta && <div style={{fontSize:12,color:C.green,marginBottom:6,fontWeight:600}}>📅 {form.desde} → {form.hasta}</div>}
             <DateRangePicker
+              key={`${form.sitio}-${fechasOcupadas.length}`}
               desde={form.desde} hasta={form.hasta}
               onDesde={v=>set('desde',v)} onHasta={v=>set('hasta',v)}
               fechasOcupadas={fechasOcupadas}
-              maxDias={form.trabajo ? VENTANA_MAX[form.trabajo.split(' (máx')[0]] || null : null}
+              maxDias={(() => { const t = form.trabajo; if (!t) return null; const k = t.includes(' (máx') ? t.split(' (máx')[0] : t; return VENTANA_MAX[k] || null })()}
               C={C}
             />
           </div>
