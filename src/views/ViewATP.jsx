@@ -3,7 +3,7 @@
    Leaflet cargado desde CDN — sin npm install
    ═══════════════════════════════════════════════════════════ */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { supabase, getSolicitudes, fromDb, updateEstado as supabaseUpdateEstado, getSitiosConfig, upsertSitioConfig } from '../lib/supabase'
+import { supabase, getSolicitudes, fromDb, updateEstado as supabaseUpdateEstado, getSitiosConfig, upsertSitioConfig, getReglasSitios, upsertReglaSitio } from '../lib/supabase'
 import { TODOS_SITIOS as SITES, COLOCALIZACIONES, TIPOS_DOCS_SITIO } from '../shared/data'
 import {
   G, BK, RD, WA, SB,
@@ -70,7 +70,6 @@ const TABS = [
   { id: 'sitios',      label: 'Sitios / Contactos', Icon: Ic.tower  },
   { id: 'whatsapp',    label: 'WhatsApp IA',       Icon: Ic.msg,    badge: true },
   { id: 'documentos',  label: 'Documentación',    Icon: Ic.shield  },
-  { id: 'docs_sitios', label: 'Docs para Sitios',  Icon: Ic.file    },
   { id: 'historial',   label: 'Historial',        Icon: Ic.history },
   { id: 'config',      label: 'Configuración',    Icon: Ic.settings },
 ]
@@ -1201,14 +1200,13 @@ const TabSitios = () => {
     setSaved(false)
     const c = cfg[s.id] || {}
     setForm({
-      propietario:    c.propietario   || s.propietario || '',
-      contacto:       c.contacto      || s.contacto    || '',
-      tel:            c.tel           || s.tel         || '',
-      email:          c.email         || s.email       || '',
-      whatsapp:       c.whatsapp      ?? false,
-      correo_activo:  c.correo_activo ?? true,
-      nota:           c.nota          || '',
-      bloqueado:      c.bloqueado     ?? false,
+      propietario:   c.propietario   || s.propietario || '',
+      contacto:      c.contacto      || s.contacto    || '',
+      tel:           c.tel           || s.tel         || '',
+      email:         c.email         || s.email       || '',
+      whatsapp:      c.whatsapp      ?? false,
+      nota:          c.nota          || '',
+      bloqueado:     c.bloqueado     ?? false,
       motivo_bloqueo: c.motivo_bloqueo || '',
       docs_requeridos: c.docs_requeridos || [],
     })
@@ -1230,7 +1228,6 @@ const TabSitios = () => {
       tel:            form.tel,
       email:          form.email,
       whatsapp:       form.whatsapp,
-      correo_activo:  form.correo_activo,
       nota:           form.nota,
       bloqueado:      form.bloqueado,
       motivo_bloqueo: form.motivo_bloqueo || '',
@@ -1340,22 +1337,6 @@ const TabSitios = () => {
                 </div>
               </div>
             </div>
-            {/* Correo activo/inactivo */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: form.correo_activo ? '#EFF6FF' : '#F9FAFB', borderRadius: 8, border: `1px solid ${form.correo_activo ? '#BFDBFE' : '#E5E7EB'}` }}>
-              <button onClick={() => setForm(f => ({ ...f, correo_activo: !f.correo_activo }))}
-                style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', background: form.correo_activo ? '#3B82F6' : '#D1D5DB', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
-                <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, transition: 'left .2s', left: form.correo_activo ? 23 : 3 }} />
-              </button>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: form.correo_activo ? '#1D4ED8' : BK }}>
-                  {form.correo_activo ? '✉️ Correo activo' : 'Correo desactivado'}
-                </div>
-                <div style={{ fontSize: 11, color: '#6B7280' }}>
-                  {form.correo_activo ? 'Se enviará correo al propietario cuando haya solicitudes' : 'No se enviará correo a este propietario'}
-                </div>
-              </div>
-            </div>
-
             {/* Bloqueo de sitio */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '14px 16px', background: form.bloqueado ? '#FEF2F2' : '#F9FAFB', borderRadius: 8, border: `1px solid ${form.bloqueado ? '#FECACA' : '#E5E7EB'}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -1384,7 +1365,7 @@ const TabSitios = () => {
             <div style={{ padding: '14px 16px', background: '#F0F9FF', borderRadius: 8, border: '1px solid #BAE6FD' }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#0369A1', marginBottom: 10 }}>📋 Documentos requeridos en este sitio</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                {([...(TIPOS_DOCS_SITIO||[]), ...(() => { try { return JSON.parse(localStorage.getItem(DOCS_STORAGE_KEY)||'[]') } catch { return [] } })()]).map(doc => (
+                {(TIPOS_DOCS_SITIO || []).map(doc => (
                   <label key={doc} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, padding: '6px 8px', borderRadius: 5, background: (form.docs_requeridos||[]).includes(doc) ? '#DBEAFE' : '#fff', border: `1px solid ${(form.docs_requeridos||[]).includes(doc) ? '#93C5FD' : '#E5E7EB'}` }}>
                     <input type="checkbox" checked={(form.docs_requeridos||[]).includes(doc)}
                       onChange={e => setForm(f => ({
@@ -1423,89 +1404,152 @@ const TabSitios = () => {
 
 
 /* ════════════════════════════════════════════════════════════
-   TAB DOCS PARA SITIOS — gestionar tipos de documentos
+   TAB REGLAS DE SITIOS — horarios, festivos, fines de semana
    ════════════════════════════════════════════════════════════ */
-const DOCS_STORAGE_KEY = 'atp_tipos_docs_custom'
+const FERIADOS_CL = [
+  '2026-01-01','2026-04-03','2026-04-04','2026-05-01','2026-05-21',
+  '2026-06-29','2026-07-16','2026-08-15','2026-09-18','2026-09-19',
+  '2026-10-12','2026-10-31','2026-11-01','2026-12-08','2026-12-25',
+]
 
-const TabDocsSitios = () => {
-  const [docs, setDocs]       = useState(() => {
-    try { return JSON.parse(localStorage.getItem(DOCS_STORAGE_KEY) || '[]') }
-    catch { return [] }
-  })
-  const [nuevoDoc, setNuevoDoc] = useState('')
-  const [saved, setSaved]       = useState(false)
+const TabReglasSitios = () => {
+  const [q, setQ]             = useState('')
+  const [sel, setSel]         = useState(null)
+  const [allReglas, setAllReglas] = useState({})
+  const [form, setForm]       = useState({})
+  const [saving, setSaving]   = useState(false)
+  const [saved, setSaved]     = useState(false)
 
-  const allDocs = [...(TIPOS_DOCS_SITIO || []), ...docs]
+  useEffect(() => { getReglasSitios().then(setAllReglas) }, [])
 
-  const agregar = () => {
-    const nombre = nuevoDoc.trim()
-    if (!nombre || allDocs.includes(nombre)) return
-    const next = [...docs, nombre]
-    setDocs(next)
-    localStorage.setItem(DOCS_STORAGE_KEY, JSON.stringify(next))
-    setNuevoDoc('')
+  const filtered = useMemo(() => {
+    if (!q) return SITES.slice(0, 60)
+    const ql = q.toLowerCase()
+    return SITES.filter(s => s.nombre.toLowerCase().includes(ql) || s.id.toLowerCase().includes(ql) || (s.region||'').toLowerCase().includes(ql)).slice(0,100)
+  }, [q])
+
+  const selectSitio = s => {
+    setSel(s)
+    setSaved(false)
+    const r = allReglas[s.id] || {}
+    setForm({
+      no_fines_semana:  r.no_fines_semana  ?? false,
+      solo_dias_habiles: r.solo_dias_habiles ?? false,
+      hora_inicio:      r.hora_inicio      || '',
+      hora_fin:         r.hora_fin         || '',
+      feriados_extra:   r.feriados_extra   || '',
+    })
+  }
+
+  const save = async () => {
+    if (!sel) return
+    setSaving(true)
+    await upsertReglaSitio({
+      sitio_id:          sel.id,
+      no_fines_semana:   form.no_fines_semana,
+      solo_dias_habiles: form.solo_dias_habiles,
+      hora_inicio:       form.hora_inicio || null,
+      hora_fin:          form.hora_fin    || null,
+      feriados_extra:    form.feriados_extra || '',
+    })
+    setAllReglas(p => ({ ...p, [sel.id]: { ...form, sitio_id: sel.id } }))
+    setSaving(false)
     setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    setTimeout(() => setSaved(false), 2500)
   }
 
-  const eliminar = (doc) => {
-    if (TIPOS_DOCS_SITIO?.includes(doc)) return // no eliminar los base
-    const next = docs.filter(d => d !== doc)
-    setDocs(next)
-    localStorage.setItem(DOCS_STORAGE_KEY, JSON.stringify(next))
-  }
+  const inp = { padding: '9px 11px', borderRadius: 7, border: '1px solid #E5E7EB', fontSize: 13, fontFamily: 'IBM Plex Sans', outline: 'none', color: BK }
+  const Toggle = ({ label, sub, field, color = '#3B82F6' }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: form[field] ? color + '0F' : '#F9FAFB', borderRadius: 8, border: `1px solid ${form[field] ? color + '44' : '#E5E7EB'}` }}>
+      <button onClick={() => setForm(f => ({ ...f, [field]: !f[field] }))}
+        style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', background: form[field] ? color : '#D1D5DB', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
+        <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: form[field] ? 23 : 3, transition: 'left .2s' }} />
+      </button>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: form[field] ? color : BK }}>{label}</div>
+        <div style={{ fontSize: 11, color: '#6B7280' }}>{sub}</div>
+      </div>
+    </div>
+  )
 
   return (
-    <div className="fade-up" style={{ padding: 28, maxWidth: 680 }}>
+    <div className="fade-up" style={{ padding: 28, display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16, alignItems: 'start' }}>
+      {/* Lista */}
       <Card style={{ overflow: 'hidden' }}>
-        <CardHeader title="Documentos para Sitios" icon={Ic.file} />
-        <div style={{ padding: 24 }}>
-          <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 20, lineHeight: 1.6 }}>
-            Gestiona los tipos de documentos disponibles para asignar a cada sitio en <strong>Sitios / Contactos</strong>.<br/>
-            Los documentos base (precargados) no se pueden eliminar. Puedes agregar los que necesites.
-          </div>
-
-          {/* Agregar nuevo */}
-          <div style={{ display: 'flex', gap: 10, marginBottom: 24 }}>
-            <input
-              value={nuevoDoc}
-              onChange={e => setNuevoDoc(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && agregar()}
-              placeholder="Ej: Permiso municipal de acceso, Seguro de vida vigente..."
-              style={{ flex: 1, padding: '10px 13px', borderRadius: 8, border: '1px solid #E5E7EB', fontSize: 13, fontFamily: 'IBM Plex Sans', outline: 'none' }}
-            />
-            <Btn variant="primary" onClick={agregar} icon={Ic.plus}>Agregar</Btn>
-          </div>
-          {saved && <div style={{ fontSize: 12, color: '#15803D', marginBottom: 12 }}>✓ Documento agregado</div>}
-
-          {/* Lista completa */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {allDocs.map((doc, i) => {
-              const esBase = TIPOS_DOCS_SITIO?.includes(doc)
-              return (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: 7, background: esBase ? '#F0F9FF' : '#FAFAFA', border: `1px solid ${esBase ? '#BAE6FD' : '#E5E7EB'}` }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 3, background: esBase ? '#DBEAFE' : '#F3F4F6', color: esBase ? '#1D4ED8' : '#6B7280', fontWeight: 600 }}>
-                      {esBase ? 'Base' : 'Custom'}
-                    </span>
-                    <span style={{ fontSize: 13, color: '#1A1A1A' }}>{doc}</span>
-                  </div>
-                  {!esBase && (
-                    <button onClick={() => eliminar(doc)}
-                      style={{ background: '#FEE2E2', border: 'none', borderRadius: 5, padding: '4px 8px', cursor: 'pointer', color: '#B91C1C', fontSize: 12, fontWeight: 600 }}>
-                      Eliminar
-                    </button>
-                  )}
+        <div style={{ padding: '12px 14px', borderBottom: '1px solid #F0F0F0' }}>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar sitio..."
+            style={{ ...inp, width: '100%' }} />
+        </div>
+        <div style={{ maxHeight: 520, overflowY: 'auto' }}>
+          {filtered.map(s => {
+            const hasRegla = !!allReglas[s.id]
+            return (
+              <div key={s.id} onClick={() => selectSitio(s)}
+                style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid #F9FAFB', background: sel?.id === s.id ? G + '11' : 'transparent', borderLeft: `3px solid ${sel?.id === s.id ? G : 'transparent'}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span className="mono" style={{ fontSize: 10, color: G, fontWeight: 600 }}>{s.id}</span>
+                  {hasRegla && <span style={{ fontSize: 9, background: '#FEF3C7', color: '#92400E', borderRadius: 3, padding: '1px 5px', fontWeight: 700 }}>REGLAS</span>}
                 </div>
-              )
-            })}
-          </div>
-
-          <div style={{ marginTop: 16, padding: '10px 14px', background: '#FFFBEB', borderRadius: 8, border: '1px solid #FCD34D', fontSize: 12, color: '#92400E' }}>
-            💡 Los documentos personalizados se guardan localmente. Para que aparezcan en "Sitios / Contactos" debes estar en el mismo navegador.
-          </div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: BK, marginTop: 1 }}>{s.nombre}</div>
+                <div style={{ fontSize: 11, color: '#9CA3AF' }}>{s.region} · {s.comuna}</div>
+              </div>
+            )
+          })}
         </div>
       </Card>
+
+      {/* Editor */}
+      {sel ? (
+        <Card style={{ overflow: 'hidden' }}>
+          <div style={{ padding: '14px 20px', background: BK }}>
+            <div className="mono" style={{ fontSize: 11, color: G }}>{sel.id}</div>
+            <div style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>{sel.nombre}</div>
+          </div>
+          <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <Toggle field="no_fines_semana"   label="🚫 Sin acceso fines de semana" sub="Bloquea sábados y domingos en el calendario" color="#E65100" />
+            <Toggle field="solo_dias_habiles" label="📅 Solo días hábiles" sub="Bloquea feriados nacionales chilenos" color="#7C3AED" />
+
+            {/* Ventana horaria */}
+            <div style={{ padding: '14px 16px', background: '#F0F9FF', borderRadius: 8, border: '1px solid #BAE6FD' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#0369A1', marginBottom: 10 }}>⏰ Ventana horaria permitida</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 5 }}>Hora inicio</label>
+                  <input type="time" value={form.hora_inicio} onChange={e => setForm(f => ({ ...f, hora_inicio: e.target.value }))} style={{ ...inp, width: '100%' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 5 }}>Hora fin</label>
+                  <input type="time" value={form.hora_fin} onChange={e => setForm(f => ({ ...f, hora_fin: e.target.value }))} style={{ ...inp, width: '100%' }} />
+                </div>
+              </div>
+              <div style={{ fontSize: 11, color: '#6B7280', marginTop: 6 }}>Deja vacío para no restringir el horario. Si se define, las horas de la solicitud deben estar dentro de esta ventana.</div>
+            </div>
+
+            {/* Feriados extra */}
+            <div style={{ padding: '14px 16px', background: '#FFF7ED', borderRadius: 8, border: '1px solid #FED7AA' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#C2410C', marginBottom: 6 }}>📆 Fechas bloqueadas adicionales</div>
+              <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 8 }}>Agrega fechas específicas bloqueadas separadas por coma (formato YYYY-MM-DD). Ej: 2026-03-15, 2026-06-01</div>
+              <textarea value={form.feriados_extra} onChange={e => setForm(f => ({ ...f, feriados_extra: e.target.value }))} rows={2}
+                style={{ ...inp, width: '100%', resize: 'vertical', lineHeight: 1.5 }} placeholder="2026-03-15, 2026-06-01..." />
+            </div>
+
+            {/* Feriados vigentes */}
+            <div style={{ fontSize: 11, color: '#6B7280' }}>
+              <strong>Feriados nacionales 2026 ya incluidos:</strong> {FERIADOS_CL.join(' · ')}
+            </div>
+
+            <Btn variant="primary" onClick={save} style={{ alignSelf: 'flex-start', minWidth: 160 }}>
+              {saving ? 'Guardando…' : saved ? '✓ Guardado' : 'Guardar reglas'}
+            </Btn>
+          </div>
+        </Card>
+      ) : (
+        <Card style={{ padding: 40, textAlign: 'center', color: '#9CA3AF' }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>⚙️</div>
+          <div style={{ fontWeight: 600, fontSize: 15, color: BK, marginBottom: 6 }}>Selecciona un sitio</div>
+          <div style={{ fontSize: 13 }}>Configura restricciones de horario, días hábiles y fechas bloqueadas para cada sitio.</div>
+        </Card>
+      )}
     </div>
   )
 }
@@ -1601,7 +1645,6 @@ const SECTIONS = {
   sitios:      { title: 'Sitios / Contactos',    sub: 'Editar propietarios, teléfono, email y WhatsApp por sitio' },
   whatsapp:    { title: 'Canal WhatsApp IA',      sub: 'Autorización de propietarios vía IA · claude-sonnet-4-20250514' },
   documentos:  { title: 'Gestión Documental',    sub: 'Estado y vigencia de documentos' },
-  docs_sitios: { title: 'Documentos para Sitios', sub: 'Agregar tipos de documentos requeridos por sitio' },
   historial:   { title: 'Historial y Reportes',  sub: 'Trazabilidad de visitas y accesos' },
   config:      { title: 'Configuración',         sub: 'API Key, variables de entorno y sistema' },
 }
@@ -1643,7 +1686,6 @@ export default function ViewATP({ onLogout }) {
       case 'sitios':      return <TabSitios />
       case 'whatsapp':    return <TabWhatsApp    sols={sols} setSols={setSols} />
       case 'documentos':  return <TabDocumentos />
-      case 'docs_sitios': return <TabDocsSitios />
       case 'historial':   return <TabHistorial   sols={sols} />
       case 'config':      return <TabConfig />
       default:            return <TabDashboard   sols={sols} />
