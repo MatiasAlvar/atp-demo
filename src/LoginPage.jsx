@@ -1,93 +1,209 @@
+/* ═══════════════════════════════════════════════════════════
+   src/LoginPage.jsx — ATP Chile · PrimeCorp SpA
+   ═══════════════════════════════════════════════════════════ */
 import { useState } from 'react'
-import { USERS, C } from './shared/data.js'
-import { ATPLogo, GlobalStyle } from './shared/components.jsx'
+import { ATPLogo, G, BK, RD } from './shared/components'
+
+const ACCOUNTS = {
+  atp:       { pass: 'atp2026',   rol: 'atp',         nombre: 'ATP Admin',            empresa: 'ATP Chile' },
+  telefonica: { pass: 'tef2026',  rol: 'operador',     nombre: 'Movistar/Telefónica',  empresa: 'Telefónica Chile S.A.' },
+  entel:     { pass: 'entel2026', rol: 'operador',     nombre: 'Entel',                empresa: 'Entel S.A.' },
+  claro:     { pass: 'claro2026', rol: 'operador',     nombre: 'Claro',                empresa: 'Claro Chile S.A.' },
+  wom:       { pass: 'wom2026',   rol: 'operador',     nombre: 'WOM',                  empresa: 'WOM S.A.' },
+  merced:    { pass: 'prop2026',  rol: 'propietario',  nombre: 'Propietario',          empresa: 'Inmobiliaria La Merced SpA' },
+}
+
+const ROL_LABELS = {
+  atp:        { label: 'ATP Admin',   color: G,         bg: G + '22' },
+  operador:   { label: 'Operador',    color: '#3B82F6', bg: '#DBEAFE' },
+  propietario:{ label: 'Propietario', color: '#8B5CF6', bg: '#EDE9FE' },
+}
 
 export default function LoginPage({ onLogin }) {
-  const [usuario, setUsuario] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError]     = useState('')
+  const [user, setUser]     = useState('')
+  const [pass, setPass]     = useState('')
+  const [error, setError]   = useState('')
   const [loading, setLoading] = useState(false)
 
-  function handleLogin(e) {
-    e.preventDefault()
-    setLoading(true)
+  const submit = async e => {
+    e?.preventDefault()
     setError('')
-    setTimeout(() => {
-      const user = USERS[usuario.toLowerCase().trim()]
-      if (user && user.password === password) {
-        onLogin({ username: usuario.toLowerCase().trim(), ...user })
-      } else {
-        setError('Usuario o contraseña incorrectos')
-      }
+    setLoading(true)
+    await new Promise(r => setTimeout(r, 420))   // simula latencia
+
+    const acc = ACCOUNTS[user.trim().toLowerCase()]
+    if (!acc || acc.pass !== pass) {
+      setError('Usuario o contraseña incorrectos.')
       setLoading(false)
-    }, 600)
+      return
+    }
+    onLogin({ usuario: user.trim().toLowerCase(), ...acc })
+    setLoading(false)
   }
 
-  const demoAccounts = [
-    { u:'atp',        p:'atp2026',   icon:'🔴', label:'ATP Admin',   desc:'Acceso total al sistema' },
-    { u:'telefonica', p:'tef2026',   icon:'🔵', label:'Telefónica',  desc:'Operador — Tarapacá / RM' },
-    { u:'entel',      p:'entel2026', icon:'🟢', label:'Entel PCS',   desc:'Operador — Tarapacá / Antofagasta' },
-    { u:'claro',      p:'claro2026', icon:'🟠', label:'Claro Chile', desc:'Operador — Tarapacá / RM' },
-    { u:'wom',        p:'wom2026',   icon:'🟣', label:'WOM S.A.',    desc:'Operador — Tarapacá / Valparaíso' },
-    { u:'merced',     p:'prop2026',  icon:'⚫', label:'Propietario', desc:'Vista propietario — autorizar accesos' },
-  ]
+  const demoBtn = (u) => {
+    const acc = ACCOUNTS[u]
+    const rolInfo = ROL_LABELS[acc.rol]
+    return (
+      <button
+        key={u}
+        onClick={() => { setUser(u); setPass(acc.pass); setError('') }}
+        style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+          padding: '10px 14px', borderRadius: 8,
+          background: user === u ? '#F5F5F5' : '#FAFAFA',
+          border: `1px solid ${user === u ? G : '#E5E7EB'}`,
+          cursor: 'pointer', transition: 'all .15s', textAlign: 'left', width: '100%',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3 }}>
+          <span style={{
+            fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4,
+            background: rolInfo.bg, color: rolInfo.color, fontFamily: 'IBM Plex Mono',
+            textTransform: 'uppercase', letterSpacing: .5,
+          }}>{rolInfo.label}</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: BK }}>{acc.nombre}</span>
+        </div>
+        <span style={{ fontSize: 11, color: '#9CA3AF', fontFamily: 'IBM Plex Mono' }}>
+          {u} / {acc.pass}
+        </span>
+      </button>
+    )
+  }
 
   return (
-    <div style={{minHeight:'100vh',background:`linear-gradient(135deg, #B71C1C 0%, #E53935 50%, #C62828 100%)`,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
-      <GlobalStyle/>
-      <div style={{width:'100%',maxWidth:420}}>
-        {/* Logo */}
-        <div style={{textAlign:'center',marginBottom:32}}>
-          <div style={{width:70,height:70,background:'rgba(255,255,255,0.15)',borderRadius:16,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 14px',backdropFilter:'blur(10px)'}}>
-            <span style={{color:'#fff',fontWeight:900,fontSize:28,letterSpacing:-2}}>ATP</span>
-          </div>
-          <div style={{color:'#fff',fontWeight:800,fontSize:22,letterSpacing:-0.5}}>Gestión de Accesos</div>
-          <div style={{color:'rgba(255,255,255,0.75)',fontSize:13,marginTop:4}}>Plataforma ATP Chile · PrimeCorp SpA</div>
+    <div style={{
+      minHeight: '100vh', background: '#0D0D0D',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: 'IBM Plex Sans, sans-serif',
+    }}>
+      {/* Fondo decorativo */}
+      <div style={{
+        position: 'fixed', inset: 0, pointerEvents: 'none',
+        background: `radial-gradient(ellipse 80% 60% at 50% 0%, ${G}0D 0%, transparent 70%)`,
+      }} />
+
+      <div style={{ width: '100%', maxWidth: 420, padding: '0 20px', position: 'relative', zIndex: 1 }}>
+        {/* LOGO */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 36 }}>
+          <ATPLogo variant="full" height={72} />
         </div>
 
-        {/* Login card */}
-        <div style={{background:'#fff',borderRadius:12,padding:32,boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
-          <form onSubmit={handleLogin}>
-            <div style={{marginBottom:16}}>
-              <label style={{display:'block',fontSize:12,fontWeight:600,color:C.textS,marginBottom:6}}>USUARIO</label>
-              <input value={usuario} onChange={e=>setUsuario(e.target.value)} placeholder="Ingresa tu usuario" autoComplete="username"
-                style={{width:'100%',border:`1px solid ${C.border}`,borderRadius:6,padding:'11px 14px',fontSize:14,color:C.text,transition:'border 0.2s'}}
-                onFocus={e=>e.target.style.borderColor=C.red} onBlur={e=>e.target.style.borderColor=C.border}/>
+        {/* Card login */}
+        <div style={{
+          background: '#161616', borderRadius: 16,
+          border: '1px solid rgba(201,168,76,.18)',
+          boxShadow: '0 24px 64px rgba(0,0,0,.6)',
+          overflow: 'hidden',
+        }}>
+          {/* Header */}
+          <div style={{
+            padding: '22px 28px 18px',
+            borderBottom: '1px solid rgba(255,255,255,.06)',
+          }}>
+            <h1 style={{ color: '#fff', fontWeight: 700, fontSize: 18, margin: 0, letterSpacing: '-.3px' }}>
+              Iniciar sesión
+            </h1>
+            <p style={{ color: 'rgba(255,255,255,.35)', fontSize: 13, margin: '5px 0 0' }}>
+              Plataforma de gestión de accesos a sitios
+            </p>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={submit} style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.5)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 7 }}>
+                Usuario
+              </label>
+              <input
+                value={user}
+                onChange={e => { setUser(e.target.value); setError('') }}
+                autoComplete="username"
+                placeholder="Ingresa tu usuario"
+                style={{
+                  width: '100%', padding: '11px 14px', borderRadius: 9,
+                  background: '#1E1E1E', border: `1px solid ${error ? RD : 'rgba(255,255,255,.1)'}`,
+                  color: '#fff', fontSize: 14, fontFamily: 'IBM Plex Sans',
+                  outline: 'none', transition: 'border-color .15s',
+                }}
+              />
             </div>
-            <div style={{marginBottom:20}}>
-              <label style={{display:'block',fontSize:12,fontWeight:600,color:C.textS,marginBottom:6}}>CONTRASEÑA</label>
-              <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password"
-                style={{width:'100%',border:`1px solid ${C.border}`,borderRadius:6,padding:'11px 14px',fontSize:14,color:C.text,transition:'border 0.2s'}}
-                onFocus={e=>e.target.style.borderColor=C.red} onBlur={e=>e.target.style.borderColor=C.border}/>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.5)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 7 }}>
+                Contraseña
+              </label>
+              <input
+                type="password"
+                value={pass}
+                onChange={e => { setPass(e.target.value); setError('') }}
+                autoComplete="current-password"
+                placeholder="••••••••"
+                style={{
+                  width: '100%', padding: '11px 14px', borderRadius: 9,
+                  background: '#1E1E1E', border: `1px solid ${error ? RD : 'rgba(255,255,255,.1)'}`,
+                  color: '#fff', fontSize: 14, fontFamily: 'IBM Plex Sans',
+                  outline: 'none', transition: 'border-color .15s',
+                }}
+              />
             </div>
-            {error&&<div style={{background:C.redL,border:`1px solid ${C.red}44`,borderRadius:6,padding:'8px 12px',fontSize:12,color:C.red,marginBottom:16}}>⚠️ {error}</div>}
-            <button type="submit" disabled={loading||!usuario||!password}
-              style={{width:'100%',padding:'12px 0',background:loading?C.gray3:C.red,color:loading?C.gray4:'#fff',border:'none',borderRadius:6,fontWeight:700,fontSize:14,cursor:loading?'wait':'pointer',transition:'all 0.2s'}}>
-              {loading ? '⏳ Verificando...' : 'Ingresar →'}
+
+            {error && (
+              <div style={{
+                padding: '10px 14px', borderRadius: 8,
+                background: RD + '18', border: `1px solid ${RD}44`,
+                color: '#FCA5A5', fontSize: 13,
+              }}>
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading || !user || !pass}
+              style={{
+                width: '100%', padding: '13px', borderRadius: 9,
+                background: loading || !user || !pass ? 'rgba(201,168,76,.3)' : G,
+                color: BK, fontWeight: 700, fontSize: 15, border: 'none',
+                cursor: loading || !user || !pass ? 'not-allowed' : 'pointer',
+                fontFamily: 'IBM Plex Sans', transition: 'all .15s',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}
+            >
+              {loading
+                ? <><span style={{ width: 16, height: 16, border: `2px solid ${BK}44`, borderTopColor: BK, borderRadius: '50%', display: 'inline-block', animation: 'spin .7s linear infinite' }} /> Verificando…</>
+                : 'Ingresar'}
             </button>
           </form>
 
           {/* Demo accounts */}
-          <div style={{marginTop:24,paddingTop:20,borderTop:`1px solid ${C.border}`}}>
-            <div style={{fontSize:11,fontWeight:700,color:C.textS,textTransform:'uppercase',letterSpacing:0.5,marginBottom:10,textAlign:'center'}}>Cuentas demo</div>
-            {demoAccounts.map(a=>(
-              <button key={a.u} onClick={()=>{setUsuario(a.u);setPassword(a.p);}}
-                style={{width:'100%',display:'flex',alignItems:'center',gap:10,background:usuario===a.u?'#FFF8E1':'#FAFAFA',border:`1px solid ${usuario===a.u?C.amber:C.border}`,borderRadius:6,padding:'8px 12px',cursor:'pointer',marginBottom:6,transition:'all 0.15s'}}>
-                <span style={{fontSize:16}}>{a.icon}</span>
-                <div style={{flex:1,textAlign:'left'}}>
-                  <div style={{fontWeight:700,fontSize:12}}>{a.label}</div>
-                  <div style={{fontSize:10,color:C.textS}}>{a.desc}</div>
-                </div>
-                <div style={{fontSize:10,fontFamily:'monospace',color:C.gray4}}>{a.u} / {a.p}</div>
-              </button>
-            ))}
+          <div style={{ padding: '0 28px 24px' }}>
+            <div style={{
+              padding: '14px 16px', borderRadius: 10,
+              background: 'rgba(255,255,255,.03)',
+              border: '1px solid rgba(255,255,255,.07)',
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.3)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 12 }}>
+                Cuentas de demo
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {Object.keys(ACCOUNTS).map(demoBtn)}
+              </div>
+            </div>
           </div>
         </div>
 
-        <div style={{textAlign:'center',marginTop:16,fontSize:11,color:'rgba(255,255,255,0.6)'}}>
-          Automatizado por <strong style={{color:'rgba(255,255,255,0.9)'}}>PrimeCorp SpA ⚡</strong>
+        <div style={{ textAlign: 'center', marginTop: 20 }}>
+          <span className="mono" style={{ fontSize: 10, color: 'rgba(255,255,255,.15)', letterSpacing: .5 }}>
+            v2.2.0 · © 2025 PrimeCorp SpA · Confidencial
+          </span>
         </div>
       </div>
+
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        input:focus { border-color: ${G} !important; box-shadow: 0 0 0 3px ${G}22; }
+      `}</style>
     </div>
   )
 }
