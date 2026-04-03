@@ -207,7 +207,7 @@ function SolRow({ s, onClick }) {
 
 
 /* ─── DATE RANGE PICKER — bloquea fechas ocupadas ─────────── */
-function DateRangePicker({ desde, hasta, onDesde, onHasta, fechasOcupadas, C }) {
+function DateRangePicker({ desde, hasta, onDesde, onHasta, fechasOcupadas, maxDias, C }) {
   const [mes, setMes] = useState(() => {
     const d = desde ? new Date(desde + 'T12:00:00') : new Date()
     return new Date(d.getFullYear(), d.getMonth(), 1)
@@ -233,6 +233,11 @@ function DateRangePicker({ desde, hasta, onDesde, onHasta, fechasOcupadas, C }) 
         // Check no blocked dates in range
         const hasBlock = fechasOcupadas.some(r => !(iso < r.desde || desde > r.hasta))
         if (hasBlock) return
+        // Check maxDias
+        if (maxDias) {
+          const dias = Math.ceil((new Date(iso) - new Date(desde)) / 86400000) + 1
+          if (dias > maxDias) return
+        }
         onHasta(iso)
       }
     }
@@ -272,9 +277,11 @@ function DateRangePicker({ desde, hasta, onDesde, onHasta, fechasOcupadas, C }) 
           const selStart = iso === desde
           const selEnd   = iso === hasta
           const inRange  = isInRange(iso)
-          const disabled = blocked || past
-          const bg = selStart||selEnd ? C.red : inRange ? C.redL : blocked ? '#FFCDD2' : 'transparent'
-          const color = selStart||selEnd ? '#fff' : blocked ? C.red : past ? C.gray3 : C.text
+          const exceedsMax = maxDias && desde && !hasta && iso > desde &&
+            Math.ceil((new Date(iso) - new Date(desde)) / 86400000) + 1 > maxDias
+          const disabled = blocked || past || exceedsMax
+          const bg = selStart||selEnd ? C.red : inRange ? C.redL : blocked ? '#FFCDD2' : exceedsMax ? '#F3F4F6' : 'transparent'
+          const color = selStart||selEnd ? '#fff' : blocked ? C.red : past||exceedsMax ? C.gray3 : C.text
           const title = blocked ? `Fecha reservada` : ''
           return (
             <div key={iso} title={title} onClick={()=>handleClick(iso)} style={{
@@ -290,10 +297,11 @@ function DateRangePicker({ desde, hasta, onDesde, onHasta, fechasOcupadas, C }) 
         })}
       </div>
       {/* Leyenda */}
-      <div style={{padding:'6px 14px 10px',display:'flex',gap:14,fontSize:11,color:C.textS,borderTop:`1px solid ${C.border}`}}>
+      <div style={{padding:'6px 14px 10px',display:'flex',gap:14,fontSize:11,color:C.textS,borderTop:`1px solid ${C.border}`,flexWrap:'wrap'}}>
         <div style={{display:'flex',alignItems:'center',gap:4}}><div style={{width:10,height:10,borderRadius:2,background:'#FFCDD2'}}/> Bloqueado</div>
         <div style={{display:'flex',alignItems:'center',gap:4}}><div style={{width:10,height:10,borderRadius:2,background:C.red}}/> Seleccionado</div>
         <div style={{display:'flex',alignItems:'center',gap:4}}><div style={{width:10,height:10,borderRadius:2,background:C.redL}}/> Rango</div>
+        {maxDias && <div style={{display:'flex',alignItems:'center',gap:4,color:C.orange,fontWeight:600}}>⏱ Máx. {maxDias} día{maxDias>1?'s':''} para este trabajo</div>}
       </div>
     </div>
   )
@@ -740,7 +748,9 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
             <DateRangePicker
               desde={form.desde} hasta={form.hasta}
               onDesde={v=>set('desde',v)} onHasta={v=>set('hasta',v)}
-              fechasOcupadas={fechasOcupadas} C={C}
+              fechasOcupadas={fechasOcupadas}
+              maxDias={form.trabajo ? VENTANA_MAX[form.trabajo.split(' (máx')[0]] || null : null}
+              C={C}
             />
           </div>
           {/* Aviso inline de reglas del sitio */}
