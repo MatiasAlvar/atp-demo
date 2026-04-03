@@ -297,6 +297,8 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
   const [nuevaEmpresa, setNuevaEmpresa] = useState({rut:'',nombre:''})
   const [alertaSitio, setAlertaSitio] = useState(null)
   const [showAlerta, setShowAlerta]   = useState(false)
+  const [fechasOcupadas, setFechasOcupadas] = useState([])  // [{desde,hasta,id,estado}]
+  const [loadingFechas, setLoadingFechas]   = useState(false)
 
   const set = (k, v) => setForm(f => ({...f, [k]: v}))
 
@@ -310,17 +312,36 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
     )
   }, [empresaBusq, empresas])
 
-  function handleSitioChange(sitioId) {
+  async function handleSitioChange(sitioId) {
     set('sitio', sitioId)
-    // Alerta de alertas table
+    set('desde', '')
+    set('hasta', '')
+    setFechasOcupadas([])
+    if (!sitioId) return
+    // Cargar fechas ocupadas desde Supabase
+    setLoadingFechas(true)
+    try {
+      const { data } = await supabase
+        .from('solicitudes')
+        .select('id,desde,hasta,estado,empresa_nombre')
+        .eq('sitio_id', sitioId)
+        .in('estado', ['Autorizado','En Gestión Propietario','Validado','Enviado','En Validación'])
+      setFechasOcupadas((data||[]).filter(r => r.desde && r.hasta))
+    } catch(e) { console.error(e) }
+    setLoadingFechas(false)
+    // Alertas
     const alerta = alertas.find(a => a.sitio_id === sitioId && a.estado === 'activo')
     if (alerta) { setAlertaSitio(alerta); setShowAlerta(true); return }
-    // Alerta contractual desde sitios_config
     const cfg = sitiosConfig[sitioId]
     if (cfg?.alerta_texto) {
       setAlertaSitio({ titulo: '⚠️ Observación contractual', descripcion: cfg.alerta_texto })
       setShowAlerta(true)
     }
+  }
+
+  function hayConflictoFechas(desde, hasta) {
+    if (!desde || !hasta) return null
+    return fechasOcupadas.find(r => !(hasta < r.desde || desde > r.hasta))
   }
 
   // Validar fechas contra reglas del sitio
@@ -384,6 +405,12 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
       showNotif(`❌ ${noAcred.nombre || noAcred.rut} no está acreditado. No se puede enviar la solicitud.`, 'error')
       return
     }
+    // Bloquear si hay conflicto de fechas
+    const conflicto = hayConflictoFechas(form.desde, form.hasta)
+    if (conflicto) {
+      showNotif(`❌ Fechas en conflicto con solicitud ${conflicto.id} (${conflicto.desde} → ${conflicto.hasta})`, 'error')
+      return
+    }
     // Validar reglas del sitio
     if (form.desde && form.hasta && form.sitio) {
       const reglaError = validarFechasConReglas(form.desde, form.hasta, form.sitio)
@@ -414,15 +441,12 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
     setSubmitting(true)
     await new Promise(r => setTimeout(r, 1200))
     const v = validarSolicitud({...form, trabajadores: trab}, solicitudes)
-    const est = v.ok ? 'En Gestión Propietario' : 'Rechazado'
+    const est = 'En Gestión Propietario'
     const hist = [
-      {estado:'Enviado',        fecha: new Date().toLocaleString('es-CL'), auto:false},
-      {estado:'En Validación',  fecha: new Date().toLocaleString('es-CL'), auto:true},
-      ...(v.ok
-        ? [{estado:'Validado',            fecha:new Date().toLocaleString('es-CL'),auto:true},
-           {estado:'En Gestión Propietario',fecha:new Date().toLocaleString('es-CL'),auto:true}]
-        : [{estado:'Rechazado',           fecha:new Date().toLocaleString('es-CL'),auto:true}]
-      ),
+      {estado:'Enviado',               fecha: new Date().toLocaleString('es-CL'), auto:false},
+      {estado:'En Validación',         fecha: new Date().toLocaleString('es-CL'), auto:true},
+      {estado:'Validado',              fecha: new Date().toLocaleString('es-CL'), auto:true},
+      {estado:'En Gestión Propietario',fecha: new Date().toLocaleString('es-CL'), auto:true},
     ]
     const sitio = TODOS_SITIOS.find(s => s.id === form.sitio)
     const sol = {
@@ -531,6 +555,40 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
       </div>
       {initialData && <div style={{background:'#EDE7F6',border:'1px solid #CE93D8',borderRadius:6,padding:'10px 16px',marginBottom:14,fontSize:13}}><span style={{fontSize:18}}>✨</span><strong style={{color:'#4A148C'}}> Pre-llenado por IA</strong> — revisa los campos antes de enviar</div>}
 
+      {/* PASO 1 — SITIO (siempre primero) */}
+      <div style={{background:C.white,border:`2px solid ${form.sitio ? C.green : C.border}`,borderRadius:8,padding:20,marginBottom:16}}>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:12,display:'flex',alignItems:'center',gap:8}}>
+          <span style={{background:form.sitio?C.green:C.blue,color:'#fff',borderRadius:'50%',width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>1</span>
+          Seleccionar Sitio <span style={{color:C.red}}>*</span>
+        </div>
+        <SitioSearchBox sitios={mySitios} value={form.sitio} onChange={id => handleSitioChange(id)} inp={inp} C={C}/>
+        {loadingFechas && <div style={{fontSize:12,color:C.textS,marginTop:8}}>⏳ Cargando disponibilidad del sitio...</div>}
+        {form.sitio && (() => {
+          const sitio = TODOS_SITIOS.find(s => s.id === form.sitio)
+          return sitio && (
+            <div style={{marginTop:10,background:C.amberL,border:'1px solid #FFE082',borderRadius:6,padding:'10px 14px',fontSize:12}}>
+              <div style={{fontWeight:600,color:C.amber,marginBottom:2}}>📍 {sitio.nombre}</div>
+              <div style={{color:C.textS}}>{sitio.tipo} · {sitio.alturaTotal}m · {sitio.region}</div>
+            </div>
+          )
+        })()}
+        {fechasOcupadas.length > 0 && (
+          <div style={{marginTop:10,background:'#FFF3E0',border:'1px solid #FFB74D',borderRadius:6,padding:'10px 14px'}}>
+            <div style={{fontWeight:700,fontSize:12,color:'#E65100',marginBottom:6}}>📅 Fechas ya reservadas en este sitio:</div>
+            {fechasOcupadas.map((r,i) => (
+              <div key={i} style={{fontSize:11,color:'#92400E',marginBottom:3,display:'flex',gap:8,alignItems:'center'}}>
+                <span style={{fontFamily:'monospace',background:'#FFB74D33',borderRadius:3,padding:'1px 5px'}}>{r.desde} → {r.hasta}</span>
+                <span style={{color:'#B45309'}}>{r.empresa_nombre||''} · {r.estado}</span>
+              </div>
+            ))}
+            <div style={{fontSize:11,color:'#E65100',marginTop:6,fontStyle:'italic'}}>Selecciona fechas que no se superpongan con las reservas anteriores.</div>
+          </div>
+        )}
+      </div>
+
+      {/* RESTO DEL FORMULARIO — solo visible si hay sitio seleccionado */}
+      {form.sitio && <>
+
       {/* Ref + correos */}
       <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:18,marginBottom:12}}>
         <div style={{marginBottom:12}}>
@@ -583,9 +641,14 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
         <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:18}}>
           <div style={{fontWeight:600,fontSize:13,marginBottom:12,paddingBottom:8,borderBottom:`1px solid ${C.border}`}}>Información del Requerimiento</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-            <div><label style={lbl}>Fecha inicio <span style={{color:C.red}}>*</span></label><input type="date" min={new Date().toISOString().split("T")[0]} value={form.desde} onChange={e=>set('desde',e.target.value)} style={inp}/></div>
+            <div><label style={lbl}>Fecha inicio <span style={{color:C.red}}>*</span></label><input type="date" min={new Date().toISOString().split("T")[0]} value={form.desde} onChange={e=>set('desde',e.target.value)} style={{...inp,borderColor:hayConflictoFechas(form.desde,form.hasta)?C.red:undefined}}/></div>
             <div><label style={lbl}>Fecha fin <span style={{color:C.red}}>*</span></label><input type="date" min={form.desde||new Date().toISOString().split("T")[0]} value={form.hasta} onChange={e=>set('hasta',e.target.value)} style={inp}/></div>
           </div>
+          {form.desde && form.hasta && hayConflictoFechas(form.desde, form.hasta) && (
+            <div style={{background:'#FEE2E2',border:'1px solid #FECACA',borderRadius:4,padding:'8px 12px',fontSize:12,color:'#B91C1C',marginBottom:10}}>
+              ⛔ Estas fechas se superponen con {hayConflictoFechas(form.desde,form.hasta)?.id}. Elige otras fechas.
+            </div>
+          )}
           {/* Aviso inline de reglas del sitio */}
           {form.desde && form.hasta && form.sitio && (() => {
             const err = validarFechasConReglas(form.desde, form.hasta, form.sitio)
@@ -612,26 +675,7 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
         </div>
       </div>
 
-      {/* Sitio */}
-      <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:18,marginBottom:12}}>
-        <label style={lbl}>Sitio ATP ({mySitios.length} disponibles para {OP_SHORT[user.operador]}) <span style={{color:C.red}}>*</span></label>
-        <SitioSearchBox
-          sitios={mySitios}
-          value={form.sitio}
-          onChange={id => handleSitioChange(id)}
-          inp={inp}
-          C={C}
-        />
-        {form.sitio && (() => {
-          const sitio = TODOS_SITIOS.find(s => s.id === form.sitio)
-          return sitio && (
-            <div style={{background:C.amberL,border:'1px solid #FFE082',borderRadius:4,padding:'10px 14px',fontSize:12}}>
-              <div style={{fontWeight:600,color:C.amber,marginBottom:2}}>📍 {sitio.nombre}</div>
-              <div style={{color:C.textS}}>{sitio.tipo} · {sitio.alturaTotal}m · {sitio.propietario}</div>
-            </div>
-          )
-        })()}
-      </div>
+
 
       {/* Personal */}
       <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:18,marginBottom:16}}>
