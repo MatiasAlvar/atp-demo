@@ -210,15 +210,12 @@ function ChatbotAsistente({ sol, sitio, onClose, C }) {
     if (/técnico|personal|trabajador|quién va|rut/.test(ql)) {
       const trab = (sol.trabajadores || []).filter(t => t.nombre)
       if (!trab.length) return 'No hay personal registrado en esta solicitud.'
-      return 'Personal técnico:
-' + trab.map(t => `• ${t.nombre} — RUT: ${t.rut || '—'}`).join('
-')
+      return 'Personal técnico:\n' + trab.map(t => `• ${t.nombre} — RUT: ${t.rut || '—'}`).join('\n')
     }
     if (/cuánto demora|tiempo|aprobar/.test(ql))
       return 'El proceso de aprobación depende del propietario del sitio. Habitualmente toma entre 24 y 48 horas hábiles.'
     if (/correo|email|contacto/.test(ql))
-      return `Correo mandante: ${sol.correoMandante || '—'}
-Correo contratista: ${sol.correoContratista || '—'}`
+      return `Correo mandante: ${sol.correoMandante || '—'}\nCorreo contratista: ${sol.correoContratista || '—'}`
     if (/hola|buenos|buen día|buenas/.test(ql))
       return '¡Hola! Estoy aquí para ayudarle con información sobre su solicitud de acceso.'
     if (/gracias|muchas gracias/.test(ql))
