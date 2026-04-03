@@ -790,9 +790,11 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
         )
       })()}
 
+      </> /* fin form.sitio */}
+
       <div style={{display:'flex',justifyContent:'flex-end',gap:12}}>
         <button onClick={onBack} style={{background:'transparent',color:C.red,border:'none',cursor:'pointer',fontWeight:600,fontSize:13,padding:'9px 16px'}}>Cancelar</button>
-        <button onClick={handleSubmit} disabled={submitting} style={{background:submitting?C.gray3:C.red,color:submitting?C.gray4:'#fff',border:'none',borderRadius:4,padding:'9px 24px',fontWeight:700,cursor:submitting?'not-allowed':'pointer',fontSize:13}}>
+        <button onClick={handleSubmit} disabled={submitting || !!hayConflictoFechas(form.desde,form.hasta)} style={{background:(submitting||hayConflictoFechas(form.desde,form.hasta))?C.gray3:C.red,color:(submitting||hayConflictoFechas(form.desde,form.hasta))?C.gray4:'#fff',border:'none',borderRadius:4,padding:'9px 24px',fontWeight:700,cursor:(submitting||hayConflictoFechas(form.desde,form.hasta))?'not-allowed':'pointer',fontSize:13}}>
           {submitting ? '⚡ Validando...' : 'Enviar Solicitud →'}
         </button>
       </div>
