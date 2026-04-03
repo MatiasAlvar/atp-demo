@@ -206,3 +206,11 @@ export const Timeline = ({ estado }) => {
     </div>
   )
 }
+
+/* ─── STUBS — compatibilidad ViewOperador ───────────────── */
+export const GlobalStyle = () => null
+export const AutoPill    = ({ label }) => <Badge label={label || ''} />
+export const Notif       = ({ children }) => <div>{children}</div>
+export const FlowTracker = ({ estado }) => <Timeline estado={estado} />
+export const SolicitudCard = ({ children, ...p }) => <Card {...p}>{children}</Card>
+export const DetalleModal  = ({ children }) => <>{children}</>
