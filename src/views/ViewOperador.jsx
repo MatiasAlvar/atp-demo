@@ -207,14 +207,14 @@ function SolRow({ s, onClick }) {
 
 /* ─── SITIO SEARCHBOX — combobox con 772 sitios ─────────── */
 function SitioSearchBox({ sitios, value, onChange, inp, C }) {
-  const [q, setQ] = React.useState('')
-  const [open, setOpen] = React.useState(false)
-  const [focused, setFocused] = React.useState(false)
-  const ref = React.useRef(null)
+  const [q, setQ] = useState('')
+  const [open, setOpen] = useState(false)
+  const [focused, setFocused] = useState(false)
+  const ref = useRef(null)
 
   const selected = sitios.find(s => s.id === value)
 
-  const filtered = React.useMemo(() => {
+  const filtered = useMemo(() => {
     if (!q || q.length < 1) return sitios.slice(0, 60)
     const ql = q.toLowerCase()
     return sitios.filter(s =>
@@ -226,7 +226,7 @@ function SitioSearchBox({ sitios, value, onChange, inp, C }) {
     ).slice(0, 100)
   }, [q, sitios])
 
-  React.useEffect(() => {
+  useEffect(() => {
     const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
