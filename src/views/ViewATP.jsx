@@ -76,15 +76,15 @@ const TABS = [
 
 const AtpSidebar = ({ active, setActive, pendWa }) => (
   <aside style={{
-    width: 240, minHeight: '100vh', background: SB,
+    width: 240, minHeight: '100vh', background: '#FFFFFF', borderRight: '1px solid #E5E7EB',
     display: 'flex', flexDirection: 'column', flexShrink: 0,
   }}>
     {/* Logo */}
-    <div style={{ padding: '20px 18px 16px', borderBottom: '1px solid rgba(201,168,76,.12)' }}>
-      <ATPLogo variant="full" height={44} />
-      <div style={{ marginTop: 12, padding: '5px 10px', background: 'rgba(201,168,76,.08)', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+    <div style={{ padding: '20px 18px 16px', borderBottom: '1px solid #F0F0F0' }}>
+      <ATPLogo variant="compact" height={36} />
+      <div style={{ marginTop: 12, padding: '5px 10px', background: '#FEF3C7', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
         <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#22C55E', flexShrink: 0 }} />
-        <span className="mono" style={{ fontSize: 10, color: 'rgba(255,255,255,.4)', letterSpacing: .5 }}>ATP Admin · Sistema activo</span>
+        <span className="mono" style={{ fontSize: 10, color: '#92400E', letterSpacing: .5 }}>ATP Admin · Sistema activo</span>
       </div>
     </div>
     {/* Nav */}
@@ -94,18 +94,18 @@ const AtpSidebar = ({ active, setActive, pendWa }) => (
         return (
           <button key={id} onClick={() => setActive(id)} style={{
             width: '100%', display: 'flex', alignItems: 'center', gap: 11,
-            padding: '11px 18px', background: on ? 'rgba(201,168,76,.1)' : 'transparent',
+            padding: '11px 18px', background: on ? '#FEF3C7' : 'transparent',
             borderLeft: `3px solid ${on ? G : 'transparent'}`,
-            color: on ? G : 'rgba(255,255,255,.45)',
+            color: on ? G : '#6B7280',
             fontSize: 13, fontWeight: on ? 600 : 400, fontFamily: 'IBM Plex Sans',
             border: 'none', cursor: 'pointer', textAlign: 'left', transition: 'all .15s',
             position: 'relative',
           }}>
-            <Icon w={17} h={17} style={{ color: on ? G : 'rgba(255,255,255,.3)', flexShrink: 0 }} />
+            <Icon w={17} h={17} style={{ color: on ? G : '#9CA3AF', flexShrink: 0 }} />
             {label}
             {badge && pendWa > 0 && (
               <span style={{
-                marginLeft: 'auto', background: WA, color: '#fff',
+                marginLeft: 'auto', background: '#22C55E', color: '#fff',
                 fontSize: 10, fontWeight: 700, borderRadius: 10, padding: '1px 6px',
                 fontFamily: 'IBM Plex Mono',
               }}>{pendWa}</span>
@@ -114,8 +114,8 @@ const AtpSidebar = ({ active, setActive, pendWa }) => (
         )
       })}
     </nav>
-    <div style={{ padding: '14px 18px', borderTop: '1px solid rgba(255,255,255,.05)' }}>
-      <div className="mono" style={{ fontSize: 10, color: 'rgba(255,255,255,.18)' }}>v2.2.0 · © 2025 PrimeCorp SpA</div>
+    <div style={{ padding: '14px 18px', borderTop: '1px solid #F0F0F0' }}>
+      <div className="mono" style={{ fontSize: 10, color: '#9CA3AF' }}>v2.2.0 · © 2025 PrimeCorp SpA</div>
     </div>
   </aside>
 )
@@ -1410,7 +1410,7 @@ export default function ViewATP({ onLogout }) {
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#F2F3F5' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: '#F8FAFC' }}>
       <AtpSidebar active={tab} setActive={setTab} pendWa={pendWa} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
         <AtpHeader title={title} sub={sub} onLogout={onLogout} />

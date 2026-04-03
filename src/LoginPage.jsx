@@ -3,14 +3,25 @@
    ═══════════════════════════════════════════════════════════ */
 import { useState } from 'react'
 import { ATPLogo, G, BK, RD } from './shared/components'
+import { USERS } from './shared/data.js'
+
+// Passwords locales (no están en data.js por seguridad)
+const PASSWORDS = {
+  atp:        'atp2026',
+  telefonica: 'tef2026',
+  entel:      'entel2026',
+  claro:      'claro2026',
+  wom:        'wom2026',
+  merced:     'prop2026',
+}
 
 const ACCOUNTS = {
-  atp:        { pass: 'atp2026',   role: 'atp',         nombre: 'ATP Admin',            empresa: 'ATP Chile' },
-  telefonica: { pass: 'tef2026',   role: 'operador',    nombre: 'Movistar/Telefónica',  empresa: 'Telefónica Chile S.A.' },
-  entel:      { pass: 'entel2026', role: 'operador',    nombre: 'Entel',                empresa: 'Entel S.A.' },
-  claro:      { pass: 'claro2026', role: 'operador',    nombre: 'Claro',                empresa: 'Claro Chile S.A.' },
-  wom:        { pass: 'wom2026',   role: 'operador',    nombre: 'WOM',                  empresa: 'WOM S.A.' },
-  merced:     { pass: 'prop2026',  role: 'propietario', nombre: 'Propietario',          empresa: 'Inmobiliaria La Merced SpA' },
+  atp:        { pass: 'atp2026',   role: 'atp',         nombre: 'ATP Admin',           empresa: 'ATP Chile' },
+  telefonica: { pass: 'tef2026',   role: 'operador',    nombre: 'Movistar/Telefónica', empresa: 'Telefónica Chile S.A.' },
+  entel:      { pass: 'entel2026', role: 'operador',    nombre: 'Entel',               empresa: 'Entel S.A.' },
+  claro:      { pass: 'claro2026', role: 'operador',    nombre: 'Claro',               empresa: 'Claro Chile S.A.' },
+  wom:        { pass: 'wom2026',   role: 'operador',    nombre: 'WOM',                 empresa: 'WOM S.A.' },
+  merced:     { pass: 'prop2026',  role: 'propietario', nombre: 'Propietario',         empresa: 'Inmobiliaria La Merced SpA' },
 }
 
 const ROL_LABELS = {
@@ -37,9 +48,10 @@ export default function LoginPage({ onLogin }) {
       setLoading(false)
       return
     }
+    // Merge con USERS de data.js para preservar todos los campos que ViewOperador/ViewPropietario esperan
     const username = user.trim().toLowerCase()
-    const { USERS } = await import('./shared/data.js')
-    onLogin({ username, ...acc, ...(USERS?.[username] || {}) })
+    const usersData = USERS?.[username] || {}
+    onLogin({ username, ...acc, ...usersData })
     setLoading(false)
   }
 
@@ -53,7 +65,7 @@ export default function LoginPage({ onLogin }) {
         style={{
           display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
           padding: '10px 14px', borderRadius: 8,
-          background: user === u ? '#F5F5F5' : '#FAFAFA',
+          background: user === u ? '#FEF3C7' : '#FFFFFF',
           border: `1px solid ${user === u ? G : '#E5E7EB'}`,
           cursor: 'pointer', transition: 'all .15s', textAlign: 'left', width: '100%',
         }}
@@ -75,14 +87,14 @@ export default function LoginPage({ onLogin }) {
 
   return (
     <div style={{
-      minHeight: '100vh', background: '#0D0D0D',
+      minHeight: '100vh', background: '#F0F2F5',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: 'IBM Plex Sans, sans-serif',
     }}>
       {/* Fondo decorativo */}
       <div style={{
         position: 'fixed', inset: 0, pointerEvents: 'none',
-        background: `radial-gradient(ellipse 80% 60% at 50% 0%, ${G}0D 0%, transparent 70%)`,
+        background: `radial-gradient(ellipse 80% 60% at 50% 0%, ${G}18 0%, transparent 70%)`,
       }} />
 
       <div style={{ width: '100%', maxWidth: 420, padding: '0 20px', position: 'relative', zIndex: 1 }}>
@@ -93,20 +105,20 @@ export default function LoginPage({ onLogin }) {
 
         {/* Card login */}
         <div style={{
-          background: '#161616', borderRadius: 16,
-          border: '1px solid rgba(201,168,76,.18)',
-          boxShadow: '0 24px 64px rgba(0,0,0,.6)',
+          background: '#FFFFFF', borderRadius: 16,
+          border: '1px solid #E5E7EB',
+          boxShadow: '0 4px 24px rgba(0,0,0,.08)',
           overflow: 'hidden',
         }}>
           {/* Header */}
           <div style={{
             padding: '22px 28px 18px',
-            borderBottom: '1px solid rgba(255,255,255,.06)',
+            borderBottom: '1px solid #F0F0F0',
           }}>
-            <h1 style={{ color: '#fff', fontWeight: 700, fontSize: 18, margin: 0, letterSpacing: '-.3px' }}>
+            <h1 style={{ color: '#1A1A1A', fontWeight: 700, fontSize: 18, margin: 0, letterSpacing: '-.3px' }}>
               Iniciar sesión
             </h1>
-            <p style={{ color: 'rgba(255,255,255,.35)', fontSize: 13, margin: '5px 0 0' }}>
+            <p style={{ color: '#6B7280', fontSize: 13, margin: '5px 0 0' }}>
               Plataforma de gestión de accesos a sitios
             </p>
           </div>
@@ -114,7 +126,7 @@ export default function LoginPage({ onLogin }) {
           {/* Form */}
           <form onSubmit={submit} style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
-              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.5)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 7 }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 7 }}>
                 Usuario
               </label>
               <input
@@ -124,15 +136,15 @@ export default function LoginPage({ onLogin }) {
                 placeholder="Ingresa tu usuario"
                 style={{
                   width: '100%', padding: '11px 14px', borderRadius: 9,
-                  background: '#1E1E1E', border: `1px solid ${error ? RD : 'rgba(255,255,255,.1)'}`,
-                  color: '#fff', fontSize: 14, fontFamily: 'IBM Plex Sans',
+                  background: '#F9FAFB', border: `1px solid ${error ? RD : '#E5E7EB'}`,
+                  color: '#1A1A1A', fontSize: 14, fontFamily: 'IBM Plex Sans',
                   outline: 'none', transition: 'border-color .15s',
                 }}
               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.5)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 7 }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#374151', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 7 }}>
                 Contraseña
               </label>
               <input
@@ -143,8 +155,8 @@ export default function LoginPage({ onLogin }) {
                 placeholder="••••••••"
                 style={{
                   width: '100%', padding: '11px 14px', borderRadius: 9,
-                  background: '#1E1E1E', border: `1px solid ${error ? RD : 'rgba(255,255,255,.1)'}`,
-                  color: '#fff', fontSize: 14, fontFamily: 'IBM Plex Sans',
+                  background: '#F9FAFB', border: `1px solid ${error ? RD : '#E5E7EB'}`,
+                  color: '#1A1A1A', fontSize: 14, fontFamily: 'IBM Plex Sans',
                   outline: 'none', transition: 'border-color .15s',
                 }}
               />
@@ -182,10 +194,10 @@ export default function LoginPage({ onLogin }) {
           <div style={{ padding: '0 28px 24px' }}>
             <div style={{
               padding: '14px 16px', borderRadius: 10,
-              background: 'rgba(255,255,255,.03)',
-              border: '1px solid rgba(255,255,255,.07)',
+              background: '#F9FAFB',
+              border: '1px solid #E5E7EB',
             }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.3)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: .5, marginBottom: 12 }}>
                 Cuentas de demo
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -196,7 +208,7 @@ export default function LoginPage({ onLogin }) {
         </div>
 
         <div style={{ textAlign: 'center', marginTop: 20 }}>
-          <span className="mono" style={{ fontSize: 10, color: 'rgba(255,255,255,.15)', letterSpacing: .5 }}>
+          <span className="mono" style={{ fontSize: 10, color: '#9CA3AF', letterSpacing: .5 }}>
             v2.2.0 · © 2025 PrimeCorp SpA · Confidencial
           </span>
         </div>
@@ -204,7 +216,7 @@ export default function LoginPage({ onLogin }) {
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        input:focus { border-color: ${G} !important; box-shadow: 0 0 0 3px ${G}22; }
+        input:focus { border-color: ${G} !important; box-shadow: 0 0 0 3px ${G}22; outline: none; }
       `}</style>
     </div>
   )

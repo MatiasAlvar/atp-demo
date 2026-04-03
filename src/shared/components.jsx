@@ -20,19 +20,13 @@ export const ATPLogo = ({ variant = 'full', height = 48, style = {} }) => {
     return (
       <div style={{
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        background: BK, borderRadius: 8, padding: '4px 8px',
+        background: '#1A1A1A', borderRadius: 8, padding: '6px 10px',
         ...style
       }}>
         <img
           src="/Logo_de_ATP.png"
           alt="ATP Chile"
-          style={{
-            height,
-            width: 'auto',
-            objectFit: 'cover',
-            objectPosition: 'left center',
-            maxWidth: height * 1.1,
-          }}
+          style={{ height, width: 'auto' }}
         />
       </div>
     )
