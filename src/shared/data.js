@@ -139,7 +139,7 @@ export function validarSolicitud(sol, solicitudes = []) {
   if (badRUT) errores.push(`RUT inválido: ${badRUT.rut} — usa el formato XX.XXX.XXX-X`)
 
   const colo = COLOCALIZACIONES[sol.sitio] || []
-  if (sol.sitio && !colo.includes(sol.operador))
+  if (sol.sitio && colo.length > 0 && !colo.includes(sol.operador))
     errores.push(`${OP_SHORT[sol.operador]||sol.operador} no está colocalizado en ${sol.sitio}`)
 
   if (sol.trabajo && sol.desde && sol.hasta) {

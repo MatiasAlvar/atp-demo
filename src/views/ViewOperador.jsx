@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase, getSolicitudes, upsertSolicitud, fromDb, getAlertas, getTrabajadores, getEmpresas, upsertEmpresa, upsertTrabajador, getSitiosConfig, getReglasSitios, getDocMensual } from '../lib/supabase.js'
-import { SITIOS, SITIOS_EXTRA, COLOCALIZACIONES, EMPRESAS_DEFAULT, TIPOS_TRABAJO, VENTANA_MAX, TRABAJO_INFORMAL, ZONAS, ESTADO_COLOR, C, OP_COLOR, OP_SHORT, validarSolicitud, daysBetween, nextId, formatRUT, validRUT } from '../shared/data.js'
+import { TODOS_SITIOS, SITIOS_EXTRA, COLOCALIZACIONES, EMPRESAS_DEFAULT, TIPOS_TRABAJO, VENTANA_MAX, TRABAJO_INFORMAL, ZONAS, ESTADO_COLOR, C, OP_COLOR, OP_SHORT, validarSolicitud, daysBetween, nextId, formatRUT, validRUT } from '../shared/data.js'
 import { ATPLogo, Badge, AutoPill, FlowTracker, SolicitudCard, DetalleModal, Notif, GlobalStyle } from '../shared/components.jsx'
 import { enviarCorreoPropietario } from '../lib/email.js'
 
@@ -64,7 +64,7 @@ export default function ViewOperador({ user, onLogout }) {
     return () => supabase.removeChannel(ch)
   }, [])
 
-  const mySitios = SITIOS.filter(s => (COLOCALIZACIONES[s.id]||[]).includes(user.operador))
+  const mySitios = TODOS_SITIOS.filter(s => { const cols = COLOCALIZACIONES[s.id]||[]; return cols.length===0 ? true : cols.includes(user.operador) })
   const filtradas = solicitudes.filter(s => !filterEst || s.estado === filterEst)
   const aut  = solicitudes.filter(s=>s.estado==='Autorizado').length
   const pend = solicitudes.filter(s=>['Enviado','En Validación','Validado','En Gestión Propietario'].includes(s.estado)).length
@@ -204,6 +204,73 @@ function SolRow({ s, onClick }) {
 }
 
 // ── FORMULARIO ────────────────────────────────────────────────
+
+/* ─── SITIO SEARCHBOX — combobox con 772 sitios ─────────── */
+function SitioSearchBox({ sitios, value, onChange, inp, C }) {
+  const [q, setQ] = React.useState('')
+  const [open, setOpen] = React.useState(false)
+  const [focused, setFocused] = React.useState(false)
+  const ref = React.useRef(null)
+
+  const selected = sitios.find(s => s.id === value)
+
+  const filtered = React.useMemo(() => {
+    if (!q || q.length < 1) return sitios.slice(0, 60)
+    const ql = q.toLowerCase()
+    return sitios.filter(s =>
+      s.nombre.toLowerCase().includes(ql) ||
+      s.id.toLowerCase().includes(ql) ||
+      (s.region||'').toLowerCase().includes(ql) ||
+      (s.comuna||'').toLowerCase().includes(ql) ||
+      (s.codigo||'').toLowerCase().includes(ql)
+    ).slice(0, 100)
+  }, [q, sitios])
+
+  React.useEffect(() => {
+    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  return (
+    <div ref={ref} style={{position:'relative',maxWidth:560}}>
+      <input
+        value={focused ? q : (selected ? `${selected.id} — ${selected.nombre}` : q)}
+        onChange={e => { setQ(e.target.value); setOpen(true); if (!e.target.value) onChange('') }}
+        onFocus={() => { setFocused(true); setQ(''); setOpen(true) }}
+        onBlur={() => setFocused(false)}
+        placeholder="Buscar por nombre, ID, región, comuna..."
+        style={{...inp, width:'100%', borderColor: value ? C.green : open ? C.blue : undefined}}
+      />
+      {value && !open && (
+        <button onClick={() => { onChange(''); setQ(''); setOpen(true) }}
+          style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:C.textS,fontSize:16,lineHeight:1}}>×</button>
+      )}
+      {open && (
+        <div style={{position:'absolute',top:'100%',left:0,right:0,background:'#fff',border:`1px solid ${C.blue}`,borderRadius:6,boxShadow:'0 6px 20px #0003',zIndex:300,maxHeight:260,overflowY:'auto'}}>
+          <div style={{padding:'6px 12px',fontSize:11,color:C.textS,borderBottom:`1px solid ${C.border}`,background:'#FAFAFA'}}>
+            {q.length > 0 ? `${filtered.length} resultados para "${q}"` : `Mostrando ${filtered.length} de ${sitios.length} sitios — escribe para filtrar`}
+          </div>
+          {filtered.length === 0
+            ? <div style={{padding:'12px 16px',fontSize:12,color:C.textS}}>Sin resultados</div>
+            : filtered.map(s => (
+              <div key={s.id} onMouseDown={() => { onChange(s.id); setQ(''); setOpen(false); setFocused(false) }}
+                style={{padding:'9px 14px',cursor:'pointer',borderBottom:`1px solid ${C.gray2}`,background: s.id===value ? C.amberL : 'transparent'}}
+                onMouseEnter={e => e.currentTarget.style.background = C.blueL||'#EEF2FF'}
+                onMouseLeave={e => e.currentTarget.style.background = s.id===value ? C.amberL : 'transparent'}>
+                <div style={{display:'flex',gap:10,alignItems:'center'}}>
+                  <span style={{fontFamily:'monospace',fontSize:11,color:C.amber,fontWeight:700,flexShrink:0}}>{s.id}</span>
+                  <span style={{fontWeight:600,fontSize:13,color:C.text}}>{s.nombre}</span>
+                </div>
+                <div style={{fontSize:11,color:C.textS,marginTop:2}}>{s.region} · {s.comuna} · {s.tipo}</div>
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, empresas, setEmpresas, alertas, reglas, sitiosConfig, showNotif, onBack, initialData }) {
   const [form, setForm] = useState({
     operador: user.operador,
@@ -233,7 +300,7 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
 
   const set = (k, v) => setForm(f => ({...f, [k]: v}))
 
-  const mySitios = SITIOS.filter(s => (COLOCALIZACIONES[s.id]||[]).includes(user.operador))
+  const mySitios = TODOS_SITIOS.filter(s => { const cols = COLOCALIZACIONES[s.id]||[]; return cols.length===0 ? true : cols.includes(user.operador) })
 
   const empresasFiltradas = useMemo(() => {
     if (!empresaBusq || empresaBusq.length < 2) return []
@@ -357,7 +424,7 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
         : [{estado:'Rechazado',           fecha:new Date().toLocaleString('es-CL'),auto:true}]
       ),
     ]
-    const sitio = SITIOS.find(s => s.id === form.sitio)
+    const sitio = TODOS_SITIOS.find(s => s.id === form.sitio)
     const sol = {
       id: nextId(solicitudes),
       ...form,
@@ -548,16 +615,19 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
       {/* Sitio */}
       <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:18,marginBottom:12}}>
         <label style={lbl}>Sitio ATP ({mySitios.length} disponibles para {OP_SHORT[user.operador]}) <span style={{color:C.red}}>*</span></label>
-        <select value={form.sitio} onChange={e=>handleSitioChange(e.target.value)} style={{...inp,maxWidth:500,color:form.sitio?C.text:C.gray4,marginBottom:form.sitio?10:0}}>
-          <option value="">Buscar sitio...</option>
-          {mySitios.map(s=><option key={s.id} value={s.id}>{s.id} — {s.nombre} ({s.regionLabel})</option>)}
-        </select>
+        <SitioSearchBox
+          sitios={mySitios}
+          value={form.sitio}
+          onChange={id => handleSitioChange(id)}
+          inp={inp}
+          C={C}
+        />
         {form.sitio && (() => {
-          const sitio = SITIOS.find(s => s.id === form.sitio)
+          const sitio = TODOS_SITIOS.find(s => s.id === form.sitio)
           return sitio && (
             <div style={{background:C.amberL,border:'1px solid #FFE082',borderRadius:4,padding:'10px 14px',fontSize:12}}>
               <div style={{fontWeight:600,color:C.amber,marginBottom:2}}>📍 {sitio.nombre}</div>
-              <div style={{color:C.textS}}>{sitio.tipo} · {sitio.altTotal}m · {sitio.propietario}</div>
+              <div style={{color:C.textS}}>{sitio.tipo} · {sitio.alturaTotal}m · {sitio.propietario}</div>
             </div>
           )
         })()}
@@ -724,7 +794,7 @@ function TabIA({ apiKey, onPreFill, showNotif }) {
     const si = setInterval(() => setParseStep(s => Math.min(s+1, steps.length-1)), 900)
     try {
       const base64 = await new Promise((res,rej) => { const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(file) })
-      const sitiosInfo = SITIOS.map(s=>`${s.id}: ${s.nombre} (${s.regionLabel})`).join('\n')
+      const sitiosInfo = SITIOS.map(s=>`${s.id}: ${s.nombre} (${s.region})`).join('\n')
 
       // ── PASO 1: Validar tipo de documento (si no es "cualquiera") ──
       if (tipoDoc && tipoDoc.id !== 'cualquiera') {
