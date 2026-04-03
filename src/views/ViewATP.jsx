@@ -402,7 +402,7 @@ const SitesMapLeaflet = ({ sites = SITES, height = 520, zoom = 7, center = [-34.
       attributionControl: false,
     })
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
       subdomains: 'abcd',
       maxZoom: 19,
     }).addTo(map)
@@ -420,16 +420,16 @@ const SitesMapLeaflet = ({ sites = SITES, height = 520, zoom = 7, center = [-34.
 
       if (showPopup) {
         m.bindPopup(`
-          <div style="font-family:'IBM Plex Sans',sans-serif;padding:14px;min-width:210px;background:#1A1A1A;color:#fff;border-radius:10px">
+          <div style="font-family:'IBM Plex Sans',sans-serif;padding:14px;min-width:210px;background:#FFFFFF;color:#1A1A1A;border-radius:10px;border:1px solid #E5E7EB;box-shadow:0 4px 16px rgba(0,0,0,.12)">
             <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:${G};font-weight:600;letter-spacing:.5px">${site.id}</div>
             <div style="font-weight:700;font-size:15px;margin:4px 0 2px">${site.nombre}</div>
-            <div style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:10px">${site.region} · ${site.tipo}</div>
+            <div style="font-size:12px;color:#6B7280;margin-bottom:10px">${site.region} · ${site.tipo}</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
               <span style="padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;background:${site.estado === 'ocupado' ? '#F59E0B22' : '#22C55E22'};color:${site.estado === 'ocupado' ? '#FBBF24' : '#4ADE80'};font-family:monospace;text-transform:uppercase">${site.estado}</span>
               ${site.whatsapp ? `<span style="padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;background:#25D36622;color:#4ADE80;font-family:monospace">📲 WHATSAPP</span>` : ''}
               ${site.restriccionHorario ? `<span style="padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;background:#F59E0B22;color:#FBBF24;font-family:monospace">⏰ ${site.restriccionHorario.inicio}–${site.restriccionHorario.fin}</span>` : ''}
             </div>
-            <div style="margin-top:10px;font-size:11px;color:rgba(255,255,255,.4)">${site.propietario}</div>
+            <div style="margin-top:10px;font-size:11px;color:#9CA3AF">${site.propietario}</div>
           </div>`,
           { maxWidth: 260 }
         )
@@ -444,7 +444,7 @@ const SitesMapLeaflet = ({ sites = SITES, height = 520, zoom = 7, center = [-34.
   }, [leafletReady])   // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!leafletReady) return (
-    <div style={{ height, width: '100%', background: '#0D1117', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ height, width: '100%', background: '#F0F0F0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <span style={{ color: 'rgba(201,168,76,.5)', fontSize: 13, fontFamily: 'IBM Plex Mono' }}>Cargando mapa…</span>
     </div>
   )
@@ -496,12 +496,12 @@ const TabMapa = () => {
 
       {/* Mapa */}
       <Card style={{ overflow: 'hidden' }}>
-        <div style={{ background: BK, padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ background: '#F8FAFC', padding: '12px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #E5E7EB' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Ic.map w={16} h={16} style={{ color: G }} />
             <span style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>Infraestructura ATP Chile</span>
           </div>
-          <span className="mono" style={{ fontSize: 11, color: 'rgba(255,255,255,.4)' }}>{filtered.length} sitios · CartoDB Dark</span>
+          <span className="mono" style={{ fontSize: 11, color: '#9CA3AF' }}>{filtered.length} sitios · CartoDB Light</span>
         </div>
         <SitesMapLeaflet key={mapKey} sites={filtered} height={580} zoom={7} />
       </Card>
