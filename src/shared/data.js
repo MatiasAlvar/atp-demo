@@ -265,7 +265,10 @@ export const SITIOS_EXTRA = [
 ]
 
 // Array combinado para uso en mapa
-export const TODOS_SITIOS = [...SITIOS, ...SITIOS_EXTRA]
+import { SITIOS_BBDD } from './sitios_bbdd.js'
+export const TODOS_SITIOS = [...SITIOS_BBDD]
+
+
 
 // ── DOCUMENTOS OBLIGATORIOS (tipos) ──────────────────────────
 export const TIPOS_DOCS_SITIO = [
