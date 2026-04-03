@@ -287,7 +287,7 @@ const TabSolicitudes = ({ sols, setSols }) => {
                   </div>
                   <Badge label={s.estado} />
                 </div>
-                <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.tipoTrabajo}</div>
+                <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.trabajo}</div>
                 <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#9CA3AF' }}>
                   <span>📅 {s.fechaIngreso}</span>
                   <span>👷 {s.contratista}</span>
@@ -321,7 +321,7 @@ const TabSolicitudes = ({ sols, setSols }) => {
                   { lbl: 'Empresa', val: sel.empresa },
                   { lbl: 'Fecha ingreso', val: `${sel.fechaIngreso} ${sel.horaIngreso}` },
                   { lbl: 'Fecha salida', val: `${sel.fechaSalida || '—'} ${sel.horaSalida || ''}` },
-                  { lbl: 'Tipo de faena', val: sel.tipoTrabajo, full: true },
+                  { lbl: 'Tipo de faena', val: sel.trabajo, full: true },
                 ].map((x, i) => (
                   <div key={i} style={{ gridColumn: x.full ? '1/-1' : 'auto' }}>
                     <div style={{ fontSize: 10, color: '#9CA3AF', textTransform: 'uppercase', fontWeight: 700, letterSpacing: .5 }}>{x.lbl}</div>
@@ -542,7 +542,7 @@ const TabMapa = () => {
    TAB WHATSAPP — IA REAL (Claude claude-sonnet-4-20250514)
    ════════════════════════════════════════════════════════════ */
 const buildSystemPrompt = (sol, site) => {
-  const tecnicos = sol.cuadrilla?.map(t => t.nombre).join(', ') || sol.contratista
+  const tecnicos = (sol.trabajadores||[]).map(t=>t.nombre).filter(Boolean).join(', ') || sol.empresaNombre || '—'
   const horario  = site?.restriccionHorario
     ? `⚠ Restricción horaria del sitio: solo se permite ingreso entre ${site.restriccionHorario.inicio} y ${site.restriccionHorario.fin} hrs. ${site.restriccionHorario.descripcion}`
     : 'Sin restricción horaria especial.'
@@ -553,15 +553,14 @@ Estás respondiendo EN NOMBRE DE ATP CHILE a mensajes del propietario del sitio.
 
 CONTEXTO COMPLETO DE LA SOLICITUD:
 - ID Solicitud: ${sol.id}
-- Sitio: ${site?.nombre || sol.nombreSitio} (${sol.sitioId})
+- Sitio: ${site?.nombre || sol.sitio} (${sol.sitio})
 - Propietario del sitio: ${site?.propietario || 'No especificado'}
 - Tipo de sitio: ${site?.tipo || '—'} | Región: ${site?.region || '—'} | Comuna: ${site?.comuna || '—'}
 - Operadora: ${sol.empresa}
-- Descripción del trabajo: ${sol.tipoTrabajo}
-- Fecha y hora de ingreso: ${sol.fechaIngreso} a las ${sol.horaIngreso} hrs
-- Fecha y hora de salida: ${sol.fechaSalida || sol.fechaIngreso} a las ${sol.horaSalida || '—'} hrs
-- Técnico responsable: ${sol.contratista} (RUT: ${sol.rut})
-- Cuadrilla completa: ${tecnicos}
+- Descripción del trabajo: ${sol.trabajo}
+- Fecha de ingreso: ${sol.desde} → ${sol.hasta}
+- Empresa contratista: ${sol.empresaNombre || sol.empresa}
+- Trabajadores: ${(sol.trabajadores||[]).map(t=>t.nombre).filter(Boolean).join(', ') || '—'}
 - ${horario}
 
 INSTRUCCIONES DE COMPORTAMIENTO:
@@ -631,7 +630,7 @@ const WaChat = ({ sol, site, onUpdateEstado }) => {
     {
       from: 'bot',
       time: now(),
-      text: `Hola! Te escribimos de ATP Chile. Hay una solicitud de acceso a tu sitio *${site?.nombre || sol.nombreSitio}* para el día ${sol.fechaIngreso} (${sol.horaIngreso} – ${sol.horaSalida || '—'}). La empresa *${sol.empresa}* realizará: ${sol.tipoTrabajo}. ¿Autorizas el acceso?`,
+      text: `Hola! Te escribimos de ATP Chile 👋 Hay una solicitud de acceso a tu sitio *${site?.nombre || sol.sitio}* para las fechas ${sol.desde} al ${sol.hasta}. La empresa *${sol.empresaNombre || sol.empresa}* realizará: ${sol.trabajo}. ¿Autorizas el acceso?`,
     },
   ])
   const [input, setInput]   = useState('')
@@ -879,7 +878,7 @@ const TabWhatsApp = ({ sols, setSols }) => {
                     <Badge label={s.estado} />
                   </div>
                   <div style={{ fontWeight: 700, fontSize: 13, color: BK, marginBottom: 3 }}>{SITES.find(x=>x.id===s.sitio)?.nombre||s.sitio}</div>
-                  <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.tipoTrabajo}</div>
+                  <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.trabajo}</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
                     {pend && <span style={{ width: 7, height: 7, borderRadius: '50%', background: WA, flexShrink: 0, display: 'inline-block' }} />}
                     <span style={{ color: '#9CA3AF' }}>{site?.propietario || '—'}</span>
@@ -1060,7 +1059,7 @@ const TabHistorial = ({ sols }) => {
                 <tr key={i} style={{ borderBottom: '1px solid #F0F0F0' }}>
                   <td className="mono" style={{ padding: '13px 16px', fontSize: 12, color: G, fontWeight: 600 }}>{s.id}</td>
                   <td style={{ padding: '13px 16px', fontSize: 13, fontWeight: 600, color: BK }}>{SITES.find(x=>x.id===s.sitio)?.nombre||s.sitio}</td>
-                  <td style={{ padding: '13px 16px', fontSize: 12, color: '#6B7280', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.tipoTrabajo}</td>
+                  <td style={{ padding: '13px 16px', fontSize: 12, color: '#6B7280', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.trabajo}</td>
                   <td className="mono" style={{ padding: '13px 16px', fontSize: 12, color: '#374151' }}>{s.fechaIngreso}</td>
                   <td style={{ padding: '13px 16px', fontSize: 12, color: '#374151' }}>{s.empresa}</td>
                   <td style={{ padding: '13px 16px' }}><Badge label={s.estado} /></td>

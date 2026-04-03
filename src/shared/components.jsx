@@ -210,7 +210,67 @@ export const Timeline = ({ estado }) => {
 /* ─── STUBS — compatibilidad ViewOperador ───────────────── */
 export const GlobalStyle = () => null
 export const AutoPill    = ({ label }) => <Badge label={label || ''} />
-export const Notif       = ({ children }) => <div>{children}</div>
+
+export const Notif = ({ notif }) => {
+  if (!notif) return null
+  const bg = notif.type === 'error' ? '#FEE2E2' : notif.type === 'warning' ? '#FEF3C7' : '#DCFCE7'
+  const color = notif.type === 'error' ? '#991B1B' : notif.type === 'warning' ? '#92400E' : '#15803D'
+  return (
+    <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 999, background: bg, color, borderRadius: 8, padding: '12px 18px', fontWeight: 600, fontSize: 13, boxShadow: '0 4px 16px rgba(0,0,0,.12)', maxWidth: 360 }}>
+      {notif.msg}
+    </div>
+  )
+}
+
 export const FlowTracker = ({ estado }) => <Timeline estado={estado} />
 export const SolicitudCard = ({ children, ...p }) => <Card {...p}>{children}</Card>
-export const DetalleModal  = ({ children }) => <>{children}</>
+
+export const DetalleModal = ({ sol, onClose }) => {
+  if (!sol) return null
+  const C2 = { red: '#E53935', green: '#2E7D32', blue: '#1565C0', textS: '#616161', border: '#E0E0E0', white: '#fff', gray1: '#F5F5F5' }
+  const Row = ({ label, val }) => (
+    <div style={{ padding: '8px 0', borderBottom: `1px solid ${C2.border}`, display: 'flex', gap: 12 }}>
+      <span style={{ fontSize: 12, color: C2.textS, minWidth: 140, flexShrink: 0 }}>{label}</span>
+      <span style={{ fontSize: 12, fontWeight: 500 }}>{val || '—'}</span>
+    </div>
+  )
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 800, padding: 16 }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: C2.white, borderRadius: 12, width: '100%', maxWidth: 560, maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 64px rgba(0,0,0,.3)' }}>
+        <div style={{ padding: '16px 20px', background: '#1A1A1A', borderRadius: '12px 12px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontFamily: 'monospace', fontSize: 11, color: '#C9A84C', fontWeight: 700 }}>{sol.id}</div>
+            <div style={{ color: '#fff', fontWeight: 700, fontSize: 16, marginTop: 2 }}>{sol.sitio}</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, padding: '3px 10px', borderRadius: 4, background: sol.estado === 'Autorizado' ? '#DCFCE7' : sol.estado === 'Rechazado' ? '#FEE2E2' : '#DBEAFE', color: sol.estado === 'Autorizado' ? '#15803D' : sol.estado === 'Rechazado' ? '#B91C1C' : '#1D4ED8' }}>{sol.estado}</span>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,.5)', cursor: 'pointer', fontSize: 20, lineHeight: 1 }}>×</button>
+          </div>
+        </div>
+        <div style={{ padding: 20 }}>
+          <Row label="Operadora" val={sol.operador} />
+          <Row label="Empresa contratista" val={sol.empresaNombre || sol.empresa} />
+          <Row label="Tipo de trabajo" val={sol.trabajo} />
+          <Row label="Fechas" val={sol.desde && sol.hasta ? `${sol.desde} → ${sol.hasta}` : null} />
+          <Row label="Zona" val={sol.zona} />
+          <Row label="Correo mandante" val={sol.correoMandante} />
+          <Row label="Correo contratista" val={sol.correoContratista} />
+          {sol.motivo && <Row label="Motivo" val={sol.motivo} />}
+          {sol.motivoRechazo && <Row label="Motivo rechazo" val={sol.motivoRechazo} />}
+          {sol.trabajadores?.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C2.textS, textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>Personal técnico</div>
+              {sol.trabajadores.map((t, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: C2.gray1, borderRadius: 5, marginBottom: 4, fontSize: 12 }}>
+                  <span>{t.nombre || '—'}</span>
+                  <span style={{ fontFamily: 'monospace', color: C2.textS }}>{t.rut}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
