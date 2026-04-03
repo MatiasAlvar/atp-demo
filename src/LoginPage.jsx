@@ -5,12 +5,12 @@ import { useState } from 'react'
 import { ATPLogo, G, BK, RD } from './shared/components'
 
 const ACCOUNTS = {
-  atp:       { pass: 'atp2026',   rol: 'atp',         nombre: 'ATP Admin',            empresa: 'ATP Chile' },
-  telefonica: { pass: 'tef2026',  rol: 'operador',     nombre: 'Movistar/Telefónica',  empresa: 'Telefónica Chile S.A.' },
-  entel:     { pass: 'entel2026', rol: 'operador',     nombre: 'Entel',                empresa: 'Entel S.A.' },
-  claro:     { pass: 'claro2026', rol: 'operador',     nombre: 'Claro',                empresa: 'Claro Chile S.A.' },
-  wom:       { pass: 'wom2026',   rol: 'operador',     nombre: 'WOM',                  empresa: 'WOM S.A.' },
-  merced:    { pass: 'prop2026',  rol: 'propietario',  nombre: 'Propietario',          empresa: 'Inmobiliaria La Merced SpA' },
+  atp:        { pass: 'atp2026',   role: 'atp',         nombre: 'ATP Admin',            empresa: 'ATP Chile' },
+  telefonica: { pass: 'tef2026',   role: 'operador',    nombre: 'Movistar/Telefónica',  empresa: 'Telefónica Chile S.A.' },
+  entel:      { pass: 'entel2026', role: 'operador',    nombre: 'Entel',                empresa: 'Entel S.A.' },
+  claro:      { pass: 'claro2026', role: 'operador',    nombre: 'Claro',                empresa: 'Claro Chile S.A.' },
+  wom:        { pass: 'wom2026',   role: 'operador',    nombre: 'WOM',                  empresa: 'WOM S.A.' },
+  merced:     { pass: 'prop2026',  role: 'propietario', nombre: 'Propietario',          empresa: 'Inmobiliaria La Merced SpA' },
 }
 
 const ROL_LABELS = {
@@ -43,7 +43,7 @@ export default function LoginPage({ onLogin }) {
 
   const demoBtn = (u) => {
     const acc = ACCOUNTS[u]
-    const rolInfo = ROL_LABELS[acc.rol]
+    const rolInfo = ROL_LABELS[acc.role]
     return (
       <button
         key={u}
