@@ -23,6 +23,7 @@ export default function ViewOperador({ user, onLogout }) {
   const [loading, setLoading]       = useState(true)
   const [notif, setNotif]           = useState(null)
   const [detalleSol, setDetalleSol] = useState(null)
+  const [chatSol, setChatSol]       = useState(null)
   const [preFilledData, setPreFilledData] = useState(null)
   const [apiKey, setApiKey]         = useState(() => { try { return localStorage.getItem(APIKEY_KEY)||'' } catch { return '' } })
   const [showApiKey, setShowApiKey] = useState(false)
@@ -75,6 +76,7 @@ export default function ViewOperador({ user, onLogout }) {
       <Notif notif={notif}/>
 
       {detalleSol && <DetalleModal sol={detalleSol} onClose={()=>setDetalleSol(null)}/>}
+      {chatSol && <ChatbotAsistente sol={chatSol} sitio={TODOS_SITIOS.find(s=>s.id===chatSol.sitio)} onClose={()=>setChatSol(null)} C={C}/>}
 
       {showApiKey && (
         <div style={{position:'fixed',inset:0,background:'#00000055',display:'flex',alignItems:'center',justifyContent:'center',zIndex:600}}>
@@ -150,7 +152,12 @@ export default function ViewOperador({ user, onLogout }) {
               <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,overflow:'hidden'}}>
                 {filtradas.length===0
                   ? <div style={{padding:32,textAlign:'center',color:C.textS}}>No hay solicitudes {filterEst&&`con estado "${filterEst}"`}</div>
-                  : filtradas.map(s=><SolRow key={s.id} s={s} onClick={()=>setDetalleSol(s)}/>)
+                  : filtradas.map(s=>(
+              <div key={s.id} style={{position:'relative'}}>
+                <SolRow s={s} onClick={()=>setDetalleSol(s)}/>
+                <button onClick={e=>{e.stopPropagation();setChatSol(s)}} title="Asistente" style={{position:'absolute',top:10,right:10,background:'none',border:'none',cursor:'pointer',fontSize:16}}>💬</button>
+              </div>
+            ))
                 }
               </div>
             </div>
@@ -176,6 +183,99 @@ export default function ViewOperador({ user, onLogout }) {
 }
 
 // ── FILA SOLICITUD ────────────────────────────────────────────
+
+/* ─── CHATBOT RULE-BASED (sin API key) ─────────────────── */
+function ChatbotAsistente({ sol, sitio, onClose, C }) {
+  const [msgs, setMsgs] = useState([
+    { from: 'bot', text: `Hola, soy el asistente de ATP Chile. Puedo responder preguntas sobre la solicitud **${sol?.id || ''}**. ¿En qué le puedo ayudar?` }
+  ])
+  const [input, setInput] = useState('')
+  const endRef = useRef(null)
+
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs])
+
+  function responder(q) {
+    if (!sol) return 'No hay solicitud seleccionada.'
+    const ql = q.toLowerCase()
+    if (/estado|cómo va|resultado|aprobad|rechazad|autorizado/.test(ql))
+      return `El estado actual de la solicitud ${sol.id} es **${sol.estado}**.${sol.motivoRechazo ? ` Motivo: ${sol.motivoRechazo}` : ''}`
+    if (/fecha|cuándo|día|plazo/.test(ql))
+      return `La solicitud contempla acceso desde el **${sol.desde || '—'}** hasta el **${sol.hasta || '—'}**.`
+    if (/sitio|lugar|dónde|ubicación/.test(ql))
+      return `El sitio es **${sol.sitio}**${sitio?.region ? ` (${sitio.region}, ${sitio.comuna})` : ''}. Tipo: ${sitio?.tipo || '—'}.`
+    if (/trabajo|faena|qué van|qué se/.test(ql))
+      return `El tipo de trabajo es: **${sol.trabajo || '—'}**.`
+    if (/empresa|contratista|quién hace/.test(ql))
+      return `La empresa contratista es **${sol.empresaNombre || sol.empresa || '—'}**.`
+    if (/técnico|personal|trabajador|quién va|rut/.test(ql)) {
+      const trab = (sol.trabajadores || []).filter(t => t.nombre)
+      if (!trab.length) return 'No hay personal registrado en esta solicitud.'
+      return 'Personal técnico:
+' + trab.map(t => `• ${t.nombre} — RUT: ${t.rut || '—'}`).join('
+')
+    }
+    if (/cuánto demora|tiempo|aprobar/.test(ql))
+      return 'El proceso de aprobación depende del propietario del sitio. Habitualmente toma entre 24 y 48 horas hábiles.'
+    if (/correo|email|contacto/.test(ql))
+      return `Correo mandante: ${sol.correoMandante || '—'}
+Correo contratista: ${sol.correoContratista || '—'}`
+    if (/hola|buenos|buen día|buenas/.test(ql))
+      return '¡Hola! Estoy aquí para ayudarle con información sobre su solicitud de acceso.'
+    if (/gracias|muchas gracias/.test(ql))
+      return 'Con mucho gusto. Quedo a su disposición para cualquier consulta adicional.'
+    return 'Puedo responder preguntas sobre: estado, fechas, sitio, tipo de trabajo, personal técnico y empresa contratista. ¿Qué desea saber?'
+  }
+
+  function send() {
+    if (!input.trim()) return
+    const q = input.trim()
+    setInput('')
+    setMsgs(p => [...p, { from: 'user', text: q }])
+    setTimeout(() => {
+      setMsgs(p => [...p, { from: 'bot', text: responder(q) }])
+    }, 350)
+  }
+
+  const Bubble = ({ msg }) => (
+    <div style={{ display: 'flex', justifyContent: msg.from === 'user' ? 'flex-end' : 'flex-start', marginBottom: 8 }}>
+      <div style={{
+        maxWidth: '80%', padding: '9px 13px', borderRadius: msg.from === 'user' ? '12px 0 12px 12px' : '0 12px 12px 12px',
+        background: msg.from === 'user' ? C.blue : C.gray1,
+        color: msg.from === 'user' ? '#fff' : C.text,
+        fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap',
+      }}>
+        {msg.text.replace(/\*\*(.*?)\*\*/g, '$1')}
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 900, padding: 16 }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: '#fff', borderRadius: 12, width: '100%', maxWidth: 440, boxShadow: '0 16px 48px rgba(0,0,0,.2)', display: 'flex', flexDirection: 'column', maxHeight: '85vh' }}>
+        <div style={{ padding: '14px 18px', background: C.blue, borderRadius: '12px 12px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>💬 Asistente ATP Chile</div>
+            <div style={{ color: 'rgba(255,255,255,.7)', fontSize: 11 }}>{sol?.id} · Consultas sobre su solicitud</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,.7)', cursor: 'pointer', fontSize: 20 }}>×</button>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
+          {msgs.map((m, i) => <Bubble key={i} msg={m} />)}
+          <div ref={endRef} />
+        </div>
+        <div style={{ padding: '10px 12px', borderTop: `1px solid ${C.border}`, display: 'flex', gap: 8 }}>
+          <input value={input} onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && send()}
+            placeholder="Escriba su consulta..."
+            style={{ flex: 1, padding: '9px 12px', borderRadius: 6, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: 'inherit', outline: 'none' }} />
+          <button onClick={send} style={{ background: C.blue, color: '#fff', border: 'none', borderRadius: 6, padding: '9px 16px', fontWeight: 700, cursor: 'pointer', fontSize: 13 }}>Enviar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SolRow({ s, onClick }) {
   const durMs = s.tsEnviado && s.tsAutorizado ? new Date(s.tsAutorizado) - new Date(s.tsEnviado) : null
   return (
@@ -386,6 +486,8 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
     correoMandante: '',
     correoContratista: '',
     refCliente: '',
+    horaInicio: '',
+    horaFin: '',
     trabajadores: initialData?.personal?.length > 0
       ? initialData.personal.map(p => ({rut: formatRUT(p.rut||''), nombre: p.nombre||''}))
       : [{rut: formatRUT(initialData?.rut_tecnico_responsable||''), nombre: initialData?.nombre_tecnico_responsable||''}],
@@ -401,6 +503,8 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
   const [showAlerta, setShowAlerta]   = useState(false)
   const [fechasOcupadas, setFechasOcupadas] = useState([])  // [{desde,hasta,id,estado}]
   const [loadingFechas, setLoadingFechas]   = useState(false)
+  const [sitioBloquedoModal, setSitioBloquedoModal] = useState(null)
+  const [docsUploaded, setDocsUploaded]             = useState({})  // {docName: File}
 
   const set = (k, v) => setForm(f => ({...f, [k]: v}))
 
@@ -420,6 +524,13 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
     set('hasta', '')
     setFechasOcupadas([])
     if (!sitioId) return
+    // Verificar si sitio está bloqueado
+    const cfg = sitiosConfig[sitioId]
+    if (cfg?.bloqueado) {
+      setSitioBloquedoModal({ motivo: cfg.motivo_bloqueo || 'Este sitio está temporalmente bloqueado por ATP Chile.' })
+      set('sitio', '')
+      return
+    }
     // Cargar fechas ocupadas desde Supabase
     setLoadingFechas(true)
     try {
@@ -507,6 +618,16 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
       showNotif(`❌ ${noAcred.nombre || noAcred.rut} no está acreditado. No se puede enviar la solicitud.`, 'error')
       return
     }
+    // Validar docs requeridos
+    const docsReq = sitiosConfig[form.sitio]?.docs_requeridos || []
+    const docsFaltantes = docsReq.filter(d => !docsUploaded[d])
+    if (docsFaltantes.length > 0) {
+      showNotif(`❌ Faltan documentos: ${docsFaltantes.join(', ')}`, 'error')
+      return
+    }
+    // Validar horas
+    if (!form.horaInicio || !form.horaFin) { showNotif('❌ Ingresa la hora de ingreso y salida', 'error'); return }
+    if (form.desde === form.hasta && form.horaFin <= form.horaInicio) { showNotif('❌ La hora de salida debe ser mayor a la hora de ingreso', 'error'); return }
     // Bloquear si hay conflicto de fechas
     const conflicto = hayConflictoFechas(form.desde, form.hasta)
     if (conflicto) {
@@ -555,6 +676,8 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
       id: nextId(solicitudes),
       ...form,
       trabajadores: trab,
+      horaInicio: form.horaInicio,
+      horaFin: form.horaFin,
       estado: est, auto: true,
       historial: hist,
       motivo: v.ok ? '' : v.motivos?.[0] || '',
@@ -628,6 +751,17 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
           </div>
         </div>
       )}
+      {/* Sitio bloqueado modal */}
+      {sitioBloquedoModal && (
+        <div style={{position:'fixed',inset:0,background:'#00000077',display:'flex',alignItems:'center',justifyContent:'center',zIndex:999,padding:16}}>
+          <div style={{background:'#fff',borderRadius:10,padding:28,maxWidth:420,width:'100%',boxShadow:'0 16px 48px #0003'}}>
+            <div style={{fontSize:32,marginBottom:10}}>🚫</div>
+            <div style={{fontWeight:700,fontSize:17,color:C.red,marginBottom:8}}>Sitio bloqueado</div>
+            <div style={{fontSize:14,color:C.textS,marginBottom:20,lineHeight:1.6}}>{sitioBloquedoModal.motivo}</div>
+            <button onClick={()=>setSitioBloquedoModal(null)} style={{width:'100%',background:C.red,color:'#fff',border:'none',borderRadius:6,padding:'10px 0',fontWeight:700,cursor:'pointer',fontSize:14}}>Entendido</button>
+          </div>
+        </div>
+      )}
       {/* Nueva empresa modal */}
       {showNuevaEmpresa && (
         <div style={{position:'fixed',inset:0,background:'#00000066',display:'flex',alignItems:'center',justifyContent:'center',zIndex:998,padding:16}}>
@@ -674,6 +808,31 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
             </div>
           )
         })()}
+        {/* Docs requeridos por sitio */}
+        {form.sitio && sitiosConfig[form.sitio]?.docs_requeridos?.length > 0 && (
+          <div style={{marginTop:12,background:'#EFF6FF',border:'1px solid #BFDBFE',borderRadius:6,padding:'12px 14px'}}>
+            <div style={{fontWeight:700,fontSize:12,color:'#1D4ED8',marginBottom:10}}>📋 Documentos requeridos por este sitio</div>
+            {sitiosConfig[form.sitio].docs_requeridos.map(doc => (
+              <div key={doc} style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,padding:'8px 10px',background:'#fff',borderRadius:6,border:`1px solid ${docsUploaded[doc]?'#86EFAC':'#E5E7EB'}`}}>
+                <div style={{fontSize:12,color:C.text,flex:1}}>
+                  {docsUploaded[doc] ? <span style={{color:C.green}}>✓</span> : <span style={{color:C.red}}>⚠</span>} {doc}
+                </div>
+                <label style={{cursor:'pointer',background:docsUploaded[doc]?C.greenL:C.blueL,color:docsUploaded[doc]?C.green:C.blue,border:'none',borderRadius:4,padding:'4px 10px',fontSize:11,fontWeight:700,flexShrink:0}}>
+                  {docsUploaded[doc] ? 'Cambiar' : 'Subir PDF'}
+                  <input type="file" accept=".pdf" style={{display:'none'}} onChange={e=>{
+                    const f=e.target.files[0]
+                    if(!f) return
+                    if(f.size>5*1024*1024){alert('El archivo supera 5MB');return}
+                    setDocsUploaded(p=>({...p,[doc]:f.name}))
+                  }}/>
+                </label>
+              </div>
+            ))}
+            {sitiosConfig[form.sitio].docs_requeridos.some(d=>!docsUploaded[d]) && (
+              <div style={{fontSize:11,color:'#1D4ED8',marginTop:4}}>Sube todos los documentos para poder enviar la solicitud.</div>
+            )}
+          </div>
+        )}
         {fechasOcupadas.length > 0 && (
           <div style={{marginTop:10,background:'#FFF3E0',border:'1px solid #FFB74D',borderRadius:6,padding:'10px 14px'}}>
             <div style={{fontWeight:700,fontSize:12,color:'#E65100',marginBottom:6}}>📅 Fechas ya reservadas en este sitio:</div>
@@ -690,6 +849,19 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
 
       {/* RESTO DEL FORMULARIO — solo visible si hay sitio seleccionado */}
       {form.sitio && <>
+
+      {/* PASO 2 — TIPO DE TRABAJO */}
+      <div style={{background:C.white,border:`2px solid ${form.trabajo ? C.green : C.border}`,borderRadius:8,padding:20,marginBottom:16}}>
+        <div style={{fontWeight:700,fontSize:14,marginBottom:12,display:'flex',alignItems:'center',gap:8}}>
+          <span style={{background:form.trabajo?C.green:C.blue,color:'#fff',borderRadius:'50%',width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0}}>2</span>
+          Tipo de trabajo <span style={{color:C.red}}>*</span>
+        </div>
+        <select value={form.trabajo} onChange={e=>{set('trabajo',e.target.value);set('desde','');set('hasta','')}} style={{...inp,maxWidth:500,color:form.trabajo?C.text:C.gray4}}>
+          <option value="">Seleccione tipo de trabajo...</option>
+          {TIPOS_TRABAJO.map(t=><option key={t}>{t} (máx. {VENTANA_MAX[t]}d)</option>)}
+        </select>
+        {form.trabajo && <div style={{marginTop:8,background:'#EDE7F6',borderRadius:4,padding:'8px 12px',fontSize:12,color:'#4A148C'}}>💬 {TRABAJO_INFORMAL[form.trabajo]}</div>}
+      </div>
 
       {/* Ref + correos */}
       <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:6,padding:18,marginBottom:12}}>
@@ -753,6 +925,22 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
               C={C}
             />
           </div>
+          {/* Horas */}
+          {form.desde && form.hasta && (
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:10}}>
+              <div>
+                <label style={lbl}>Hora ingreso <span style={{color:C.red}}>*</span></label>
+                <input type="time" value={form.horaInicio} onChange={e=>set('horaInicio',e.target.value)} style={inp}/>
+              </div>
+              <div>
+                <label style={lbl}>Hora salida <span style={{color:C.red}}>*</span></label>
+                <input type="time" value={form.horaFin} onChange={e=>set('horaFin',e.target.value)} style={inp}/>
+                {form.desde===form.hasta && form.horaInicio && form.horaFin && form.horaFin <= form.horaInicio && (
+                  <div style={{fontSize:11,color:C.red,marginTop:3}}>⛔ Hora salida debe ser mayor a hora de ingreso</div>
+                )}
+              </div>
+            </div>
+          )}
           {/* Aviso inline de reglas del sitio */}
           {form.desde && form.hasta && form.sitio && (() => {
             const err = validarFechasConReglas(form.desde, form.hasta, form.sitio)
@@ -767,14 +955,6 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
               </div>
             ) : null
           })()}
-          <div style={{marginBottom:10}}>
-            <label style={lbl}>Tipo de trabajo <span style={{color:C.red}}>*</span></label>
-            <select value={form.trabajo} onChange={e=>set('trabajo',e.target.value)} style={{...inp,color:form.trabajo?C.text:C.gray4}}>
-              <option value="">Seleccione...</option>
-              {TIPOS_TRABAJO.map(t=><option key={t}>{t} (máx. {VENTANA_MAX[t]}d)</option>)}
-            </select>
-          </div>
-          {form.trabajo && <div style={{background:'#EDE7F6',borderRadius:4,padding:'6px 10px',fontSize:11,color:'#4A148C',marginBottom:10}}>💬 {TRABAJO_INFORMAL[form.trabajo]}</div>}
           <div><label style={lbl}>Zona</label><select value={form.zona} onChange={e=>set('zona',e.target.value)} style={{...inp,color:form.zona?C.text:C.gray4}}><option value="">Seleccione...</option>{ZONAS.map(z=><option key={z}>{z}</option>)}</select></div>
         </div>
       </div>
@@ -898,7 +1078,15 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
 
       <div style={{display:'flex',justifyContent:'flex-end',gap:12}}>
         <button onClick={onBack} style={{background:'transparent',color:C.red,border:'none',cursor:'pointer',fontWeight:600,fontSize:13,padding:'9px 16px'}}>Cancelar</button>
-        <button onClick={handleSubmit} disabled={submitting || !!hayConflictoFechas(form.desde,form.hasta)} style={{background:(submitting||hayConflictoFechas(form.desde,form.hasta))?C.gray3:C.red,color:(submitting||hayConflictoFechas(form.desde,form.hasta))?C.gray4:'#fff',border:'none',borderRadius:4,padding:'9px 24px',fontWeight:700,cursor:(submitting||hayConflictoFechas(form.desde,form.hasta))?'not-allowed':'pointer',fontSize:13}}>
+        {(!form.correoMandante || !form.correoContratista) && (
+          <span style={{fontSize:12,color:C.orange,alignSelf:'center'}}>⚠ Completa los correos para continuar</span>
+        )}
+        <button onClick={handleSubmit}
+          disabled={submitting || !!hayConflictoFechas(form.desde,form.hasta) || !form.correoMandante || !form.correoContratista}
+          style={{background:(submitting||hayConflictoFechas(form.desde,form.hasta)||!form.correoMandante||!form.correoContratista)?C.gray3:C.red,
+            color:(submitting||!form.correoMandante||!form.correoContratista)?C.gray4:'#fff',
+            border:'none',borderRadius:4,padding:'9px 24px',fontWeight:700,
+            cursor:(submitting||!form.correoMandante||!form.correoContratista)?'not-allowed':'pointer',fontSize:13}}>
           {submitting ? '⚡ Validando...' : 'Enviar Solicitud →'}
         </button>
       </div>

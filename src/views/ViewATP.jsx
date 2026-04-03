@@ -4,7 +4,7 @@
    ═══════════════════════════════════════════════════════════ */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { supabase, getSolicitudes, fromDb, updateEstado as supabaseUpdateEstado, getSitiosConfig, upsertSitioConfig } from '../lib/supabase'
-import { TODOS_SITIOS as SITES, COLOCALIZACIONES } from '../shared/data'
+import { TODOS_SITIOS as SITES, COLOCALIZACIONES, TIPOS_DOCS_SITIO } from '../shared/data'
 import {
   G, BK, RD, WA, SB,
   ATPLogo, Ic, Badge, Card, CardHeader, Btn, Timeline, STATE_COLORS,
@@ -455,7 +455,14 @@ const SitesMapLeaflet = ({ sites = SITES, height = 520, zoom = 7, center = [-34.
    TAB MAPA — exacto de versión nueva
    ════════════════════════════════════════════════════════════ */
 const TabMapa = () => {
-  const [filter, setFilter] = useState('todos')
+  const [filter, setFilter]     = useState('todos')
+  const [tablaQ, setTablaQ]     = useState('')
+  const [tablaRegion, setTablaRegion] = useState('')
+  const [tablaTipo, setTablaTipo]     = useState('')
+  const [tablaWa, setTablaWa]         = useState('')
+  const [tablaPg, setTablaPg]         = useState(1)
+  const [mapFocusSite, setMapFocusSite] = useState(null)
+  const TABLA_PP = 20
 
   const filtered = useMemo(() => {
     if (filter === 'whatsapp') return SITES.filter(s => s.whatsapp)
@@ -464,7 +471,24 @@ const TabMapa = () => {
     return SITES
   }, [filter])
 
-  const mapKey = filter  // force re-mount on filter change
+  const mapKey = filter
+
+  const tablaFiltered = useMemo(() => {
+    return SITES.filter(s => {
+      if (tablaQ) {
+        const ql = tablaQ.toLowerCase()
+        if (!s.nombre.toLowerCase().includes(ql) && !s.id.toLowerCase().includes(ql) && !(s.comuna||'').toLowerCase().includes(ql)) return false
+      }
+      if (tablaRegion && s.region !== tablaRegion) return false
+      if (tablaTipo  && s.tipo  !== tablaTipo)  return false
+      if (tablaWa === 'si' && !s.whatsapp) return false
+      if (tablaWa === 'no' && s.whatsapp)  return false
+      return true
+    })
+  }, [tablaQ, tablaRegion, tablaTipo, tablaWa])
+
+  const tablaTotalPg = Math.ceil(tablaFiltered.length / TABLA_PP)
+  const tablaPaged   = tablaFiltered.slice((tablaPg-1)*TABLA_PP, tablaPg*TABLA_PP)
 
   return (
     <div className="fade-up" style={{ padding: 28 }}>
@@ -506,33 +530,74 @@ const TabMapa = () => {
         <SitesMapLeaflet key={mapKey} sites={filtered} height={580} zoom={7} />
       </Card>
 
-      {/* Tabla resumen */}
+      {/* Buscador + tabla con filtros */}
       <Card style={{ marginTop: 14, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 16px', borderBottom: '1px solid #E5E7EB', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ position: 'relative', flex: '1 1 200px' }}>
+            <Ic.search w={14} h={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#9CA3AF', pointerEvents: 'none' }} />
+            <input value={tablaQ} onChange={e => { setTablaQ(e.target.value); setTablaPg(1) }}
+              placeholder="Buscar por nombre, ID, comuna..."
+              style={{ width: '100%', paddingLeft: 32, padding: '8px 10px 8px 32px', borderRadius: 7, border: '1px solid #E5E7EB', fontSize: 13, fontFamily: 'IBM Plex Sans', outline: 'none' }} />
+          </div>
+          <select value={tablaRegion} onChange={e => { setTablaRegion(e.target.value); setTablaPg(1) }}
+            style={{ padding: '8px 10px', borderRadius: 7, border: '1px solid #E5E7EB', fontSize: 13, fontFamily: 'IBM Plex Sans', outline: 'none', color: BK }}>
+            <option value="">Todas las regiones</option>
+            {[...new Set(SITES.map(s => s.region).filter(Boolean))].sort().map(r => <option key={r}>{r}</option>)}
+          </select>
+          <select value={tablaTipo} onChange={e => { setTablaTipo(e.target.value); setTablaPg(1) }}
+            style={{ padding: '8px 10px', borderRadius: 7, border: '1px solid #E5E7EB', fontSize: 13, fontFamily: 'IBM Plex Sans', outline: 'none', color: BK }}>
+            <option value="">Todos los tipos</option>
+            {[...new Set(SITES.map(s => s.tipo).filter(Boolean))].sort().map(t => <option key={t}>{t}</option>)}
+          </select>
+          <select value={tablaWa} onChange={e => { setTablaWa(e.target.value); setTablaPg(1) }}
+            style={{ padding: '8px 10px', borderRadius: 7, border: '1px solid #E5E7EB', fontSize: 13, fontFamily: 'IBM Plex Sans', outline: 'none', color: BK }}>
+            <option value="">WhatsApp: todos</option>
+            <option value="si">Con WhatsApp</option>
+            <option value="no">Sin WhatsApp</option>
+          </select>
+          <span style={{ fontSize: 12, color: '#9CA3AF' }}>{tablaFiltered.length} sitios</span>
+        </div>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ background: '#F8FAFC', borderBottom: '1px solid #E5E7EB' }}>
-              {['ID', 'Nombre', 'Región', 'Operadora', 'Tipo', 'Estado', 'Riesgo', 'WhatsApp'].map((h, i) => (
+              {['ID', 'Nombre', 'Región', 'Comuna', 'Tipo', 'Altura', 'WhatsApp'].map((h, i) => (
                 <th key={i} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: .5, whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {filtered.map((s, i) => (
-              <tr key={i} style={{ borderBottom: '1px solid #F0F0F0' }}>
-                <td className="mono" style={{ padding: '12px 14px', fontSize: 11, color: G, fontWeight: 600 }}>{s.id}</td>
-                <td style={{ padding: '12px 14px', fontSize: 13, fontWeight: 600, color: BK }}>{s.nombre}</td>
-                <td style={{ padding: '12px 14px', fontSize: 12, color: '#6B7280' }}>{s.region}</td>
-                <td style={{ padding: '12px 14px', fontSize: 12, color: '#6B7280' }}>{s.operadora}</td>
-                <td style={{ padding: '12px 14px', fontSize: 12, color: '#6B7280' }}>{s.tipo}</td>
-                <td style={{ padding: '12px 14px' }}><Badge label={s.estado} /></td>
-                <td style={{ padding: '12px 14px' }}><Badge label={s.riesgo} /></td>
-                <td style={{ padding: '12px 14px' }}>
-                  {s.whatsapp ? <span style={{ fontSize: 13 }}>✅</span> : <span style={{ color: '#D1D5DB', fontSize: 13 }}>—</span>}
-                </td>
-              </tr>
-            ))}
+            {tablaPaged.length === 0
+              ? <tr><td colSpan={7} style={{ padding: 32, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Sin resultados</td></tr>
+              : tablaPaged.map((s, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid #F0F0F0', cursor: 'pointer' }}
+                  onClick={() => setMapFocusSite(s)}
+                  onMouseEnter={e => e.currentTarget.style.background = '#FAFAFA'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                  <td className="mono" style={{ padding: '11px 14px', fontSize: 11, color: G, fontWeight: 600 }}>{s.id}</td>
+                  <td style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: BK }}>{s.nombre}</td>
+                  <td style={{ padding: '11px 14px', fontSize: 12, color: '#6B7280' }}>{s.region}</td>
+                  <td style={{ padding: '11px 14px', fontSize: 12, color: '#6B7280' }}>{s.comuna}</td>
+                  <td style={{ padding: '11px 14px', fontSize: 12, color: '#6B7280' }}>{s.tipo}</td>
+                  <td className="mono" style={{ padding: '11px 14px', fontSize: 12, color: '#6B7280' }}>{s.alturaTotal}m</td>
+                  <td style={{ padding: '11px 14px' }}>
+                    {s.whatsapp ? <span style={{ fontSize: 13 }}>✅</span> : <span style={{ color: '#D1D5DB' }}>—</span>}
+                  </td>
+                </tr>
+              ))
+            }
           </tbody>
         </table>
+        {tablaTotalPg > 1 && (
+          <div style={{ padding: '10px 16px', borderTop: '1px solid #F0F0F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 12, color: '#9CA3AF' }}>Pág. {tablaPg} de {tablaTotalPg}</span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button onClick={() => setTablaPg(p => Math.max(1, p-1))} disabled={tablaPg===1}
+                style={{ padding: '4px 10px', border: '1px solid #E5E7EB', borderRadius: 5, background: '#fff', cursor: tablaPg===1?'default':'pointer', opacity: tablaPg===1?.4:1 }}>‹</button>
+              <button onClick={() => setTablaPg(p => Math.min(tablaTotalPg, p+1))} disabled={tablaPg===tablaTotalPg}
+                style={{ padding: '4px 10px', border: '1px solid #E5E7EB', borderRadius: 5, background: '#fff', cursor: tablaPg===tablaTotalPg?'default':'pointer', opacity: tablaPg===tablaTotalPg?.4:1 }}>›</button>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   )
@@ -560,7 +625,7 @@ CONTEXTO COMPLETO DE LA SOLICITUD:
 - Descripción del trabajo: ${sol.trabajo}
 - Fecha de ingreso: ${sol.desde} → ${sol.hasta}
 - Empresa contratista: ${sol.empresaNombre || sol.empresa}
-- Trabajadores: ${(sol.trabajadores||[]).map(t=>t.nombre).filter(Boolean).join(', ') || '—'}
+- Trabajadores: ${(sol.trabajadores||[]).map(t=>`${t.nombre||'—'} (RUT: ${t.rut||'—'})`).join(', ') || '—'}
 - ${horario}
 
 INSTRUCCIONES DE COMPORTAMIENTO:
@@ -666,11 +731,22 @@ const WaChat = ({ sol, site, onUpdateEstado }) => {
       let motivo  = null
 
       const autorMatch = raw.match(/<<ACCION:AUTORIZAR>>/i)
-      const rechMatch  = raw.match(/<<ACCION:RECHAZAR:(.+?)>>/is)
+      const rechMatch      = raw.match(/<<ACCION:RECHAZAR:(.+?)>>/is)
+      const rechFechasMatch = raw.match(/<<ACCION:RECHAZAR_CON_FECHAS:([^|]+)\|([^|]+)\|([^>]+)>>/i)
 
       if (autorMatch) {
         accion  = 'AUTORIZAR'
         display = raw.replace(/<<ACCION:AUTORIZAR>>/gi, '').trim()
+      } else if (rechFechasMatch) {
+        accion  = 'RECHAZAR_CON_FECHAS'
+        motivo  = rechFechasMatch[1].trim()
+        const fechaDesde = rechFechasMatch[2].trim()
+        const fechaHasta = rechFechasMatch[3].trim()
+        display = raw.replace(/<<ACCION:RECHAZAR_CON_FECHAS:.+?>>/gi, '').trim()
+        display += `\n\n📅 Fechas alternativas sugeridas por el propietario: **${fechaDesde}** al **${fechaHasta}**\nSe ha notificado al contratista para que actualice la solicitud.`
+        await onUpdateEstado(sol.id, 'Rechazado', { motivo_rechazo: motivo, fechas_sugeridas: `${fechaDesde}|${fechaHasta}` })
+        setEstado('Rechazado')
+        setMsgs(p => [...p, { from: 'system', time: '', text: `❌ Rechazado con fechas alternativas: ${fechaDesde} → ${fechaHasta}` }])
       } else if (rechMatch) {
         accion  = 'RECHAZAR'
         motivo  = rechMatch[1].trim()
@@ -1124,12 +1200,15 @@ const TabSitios = () => {
     setSaved(false)
     const c = cfg[s.id] || {}
     setForm({
-      propietario: c.propietario || s.propietario || '',
-      contacto:    c.contacto    || s.contacto    || '',
-      tel:         c.tel         || s.tel         || '',
-      email:       c.email       || s.email       || '',
-      whatsapp:    c.whatsapp    ?? false,
-      nota:        c.nota        || '',
+      propietario:   c.propietario   || s.propietario || '',
+      contacto:      c.contacto      || s.contacto    || '',
+      tel:           c.tel           || s.tel         || '',
+      email:         c.email         || s.email       || '',
+      whatsapp:      c.whatsapp      ?? false,
+      nota:          c.nota          || '',
+      bloqueado:     c.bloqueado     ?? false,
+      motivo_bloqueo: c.motivo_bloqueo || '',
+      docs_requeridos: c.docs_requeridos || [],
     })
   }
 
@@ -1143,13 +1222,16 @@ const TabSitios = () => {
     if (!sel) return
     setSaving(true)
     await upsertSitioConfig({
-      sitio_id:    sel.id,
-      propietario: form.propietario,
-      contacto:    form.contacto,
-      tel:         form.tel,
-      email:       form.email,
-      whatsapp:    form.whatsapp,
-      nota:        form.nota,
+      sitio_id:       sel.id,
+      propietario:    form.propietario,
+      contacto:       form.contacto,
+      tel:            form.tel,
+      email:          form.email,
+      whatsapp:       form.whatsapp,
+      nota:           form.nota,
+      bloqueado:      form.bloqueado,
+      motivo_bloqueo: form.motivo_bloqueo || '',
+      docs_requeridos: form.docs_requeridos || [],
     })
     setCfg(p => ({ ...p, [sel.id]: { ...form, sitio_id: sel.id } }))
     setSaving(false)
@@ -1255,6 +1337,55 @@ const TabSitios = () => {
                 </div>
               </div>
             </div>
+            {/* Bloqueo de sitio */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '14px 16px', background: form.bloqueado ? '#FEF2F2' : '#F9FAFB', borderRadius: 8, border: `1px solid ${form.bloqueado ? '#FECACA' : '#E5E7EB'}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <button onClick={() => setForm(f => ({ ...f, bloqueado: !f.bloqueado }))}
+                  style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', background: form.bloqueado ? RD : '#D1D5DB', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
+                  <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, transition: 'left .2s', left: form.bloqueado ? 23 : 3 }} />
+                </button>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: form.bloqueado ? '#B91C1C' : BK }}>
+                    {form.bloqueado ? '🚫 Sitio BLOQUEADO' : 'Sitio activo'}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#6B7280' }}>Al activar, nadie podrá ingresar solicitudes en este sitio</div>
+                </div>
+              </div>
+              {form.bloqueado && (
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 5 }}>Motivo del bloqueo (aparecerá en popup)</label>
+                  <textarea value={form.motivo_bloqueo || ''} onChange={e => setForm(f => ({ ...f, motivo_bloqueo: e.target.value }))} rows={2}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #FECACA', fontSize: 13, fontFamily: 'IBM Plex Sans', resize: 'vertical', outline: 'none' }}
+                    placeholder="Ej: Propietario no autoriza acceso hasta el 30/04 por obras en el inmueble." />
+                </div>
+              )}
+            </div>
+
+            {/* Docs requeridos */}
+            <div style={{ padding: '14px 16px', background: '#F0F9FF', borderRadius: 8, border: '1px solid #BAE6FD' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#0369A1', marginBottom: 10 }}>📋 Documentos requeridos en este sitio</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                {(TIPOS_DOCS_SITIO || []).map(doc => (
+                  <label key={doc} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, padding: '6px 8px', borderRadius: 5, background: (form.docs_requeridos||[]).includes(doc) ? '#DBEAFE' : '#fff', border: `1px solid ${(form.docs_requeridos||[]).includes(doc) ? '#93C5FD' : '#E5E7EB'}` }}>
+                    <input type="checkbox" checked={(form.docs_requeridos||[]).includes(doc)}
+                      onChange={e => setForm(f => ({
+                        ...f,
+                        docs_requeridos: e.target.checked
+                          ? [...(f.docs_requeridos||[]), doc]
+                          : (f.docs_requeridos||[]).filter(d => d !== doc)
+                      }))}
+                      style={{ accentColor: G }} />
+                    {doc}
+                  </label>
+                ))}
+              </div>
+              {(form.docs_requeridos||[]).length > 0 && (
+                <div style={{ fontSize: 11, color: '#0369A1', marginTop: 8 }}>
+                  {(form.docs_requeridos||[]).length} doc{(form.docs_requeridos||[]).length > 1 ? 's' : ''} requerido{(form.docs_requeridos||[]).length > 1 ? 's' : ''}
+                </div>
+              )}
+            </div>
+
             <Btn variant="primary" onClick={save} style={{ alignSelf: 'flex-start', minWidth: 160 }}>
               {saving ? 'Guardando…' : saved ? '✓ Guardado' : 'Guardar cambios'}
             </Btn>

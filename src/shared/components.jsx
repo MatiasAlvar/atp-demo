@@ -257,8 +257,8 @@ export const DetalleModal = ({ sol, onClose }) => {
               <div style={{ fontSize: 11, fontWeight: 700, color: C2.textS, textTransform: 'uppercase', letterSpacing: .5, marginBottom: 8 }}>Personal técnico</div>
               {sol.trabajadores.map((t, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', background: C2.gray1, borderRadius: 5, marginBottom: 4, fontSize: 12 }}>
-                  <span>{t.nombre || '—'}</span>
-                  <span style={{ fontFamily: 'monospace', color: C2.textS }}>{t.rut}</span>
+                  <span style={{fontWeight:500}}>{t.nombre || '—'}</span>
+                  <span style={{ fontFamily: 'monospace', color: C2.textS, fontSize:11 }}>{t.rut || t.rut_trabajador || '—'}</span>
                 </div>
               ))}
             </div>
