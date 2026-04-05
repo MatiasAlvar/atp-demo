@@ -309,7 +309,7 @@ function SolRow({ s, onClick }) {
 
 
 /* ─── DATE RANGE PICKER — bloquea fechas ocupadas ─────────── */
-function DateRangePicker({ desde, hasta, onDesde, onHasta, fechasOcupadas, maxDias, C }) {
+function DateRangePicker({ desde, hasta, onDesde, onHasta, fechasOcupadas, maxDias, restriccionHoraria, C }) {
   const [mes, setMes] = useState(() => {
     const d = desde ? new Date(desde + 'T12:00:00') : new Date()
     return new Date(d.getFullYear(), d.getMonth(), 1)
@@ -325,8 +325,18 @@ function DateRangePicker({ desde, hasta, onDesde, onHasta, fechasOcupadas, maxDi
   function isInRange(iso) { return desde && hasta && iso > desde && iso < hasta }
   function isConflict(iso) { return isInRange(iso) && isBlocked(iso) }
 
+  const FERIADOS_RH = ['2026-01-01','2026-04-03','2026-04-04','2026-05-01','2026-05-21','2026-06-29','2026-07-16','2026-08-15','2026-09-18','2026-09-19','2026-10-12','2026-10-31','2026-11-01','2026-12-08','2026-12-25']
+  const DIAS_SEMANA = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']
+  function isRestriccion(iso) {
+    if (!restriccionHoraria?.activa) return false
+    const dow = DIAS_SEMANA[new Date(iso + 'T12:00:00').getDay()]
+    if (restriccionHoraria.dias?.length > 0 && !restriccionHoraria.dias.includes(dow)) return true
+    if (restriccionHoraria.solo_habiles && FERIADOS_RH.includes(iso)) return true
+    return false
+  }
+
   function handleClick(iso) {
-    if (isBlocked(iso) || isPast(iso)) return
+    if (isBlocked(iso) || isPast(iso) || isRestriccion(iso)) return
     if (!desde || (desde && hasta)) {
       onDesde(iso); onHasta('')
     } else {
@@ -381,10 +391,11 @@ function DateRangePicker({ desde, hasta, onDesde, onHasta, fechasOcupadas, maxDi
           const inRange  = isInRange(iso)
           const exceedsMax = maxDias && desde && !hasta && iso > desde &&
             Math.ceil((new Date(iso) - new Date(desde)) / 86400000) + 1 > maxDias
-          const disabled = blocked || past || exceedsMax
-          const bg = selStart||selEnd ? C.red : inRange ? C.redL : blocked ? '#FFCDD2' : exceedsMax ? '#F3F4F6' : 'transparent'
-          const color = selStart||selEnd ? '#fff' : blocked ? C.red : past||exceedsMax ? C.gray3 : C.text
-          const title = blocked ? `Fecha reservada` : ''
+          const restriccion = isRestriccion(iso)
+          const disabled = blocked || past || exceedsMax || restriccion
+          const bg = selStart||selEnd ? C.red : inRange ? C.redL : blocked ? '#FFCDD2' : restriccion ? '#E5E7EB' : exceedsMax ? '#F3F4F6' : 'transparent'
+          const color = selStart||selEnd ? '#fff' : blocked ? C.red : past||exceedsMax||restriccion ? C.gray3 : C.text
+          const title = blocked ? 'Fecha reservada' : restriccion ? 'Día no permitido en este sitio' : ''
           return (
             <div key={iso} title={title} onClick={()=>handleClick(iso)} style={{
               textAlign:'center',padding:'5px 2px',borderRadius:4,fontSize:12,fontWeight:(selStart||selEnd)?700:400,
@@ -404,6 +415,9 @@ function DateRangePicker({ desde, hasta, onDesde, onHasta, fechasOcupadas, maxDi
         <div style={{display:'flex',alignItems:'center',gap:4}}><div style={{width:10,height:10,borderRadius:2,background:C.red}}/> Seleccionado</div>
         <div style={{display:'flex',alignItems:'center',gap:4}}><div style={{width:10,height:10,borderRadius:2,background:C.redL}}/> Rango</div>
         {maxDias && <div style={{display:'flex',alignItems:'center',gap:4,color:C.orange,fontWeight:600}}>⏱ Máx. {maxDias} día{maxDias>1?'s':''} para este trabajo</div>}
+        {restriccionHoraria?.activa && <div style={{display:'flex',alignItems:'center',gap:4,color:C.textS}}>
+          <div style={{width:10,height:10,borderRadius:2,background:'#E5E7EB',border:'1px solid #D1D5DB'}}/> Día restringido
+        </div>}
       </div>
     </div>
   )
@@ -1126,6 +1140,7 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
               onDesde={v=>set('desde',v)} onHasta={v=>set('hasta',v)}
               fechasOcupadas={fechasOcupadas}
               maxDias={(() => { const t = form.trabajo; if (!t) return null; const k = t.includes(' (máx') ? t.split(' (máx')[0] : t; return VENTANA_MAX[k] || null })()}
+              restriccionHoraria={sitiosConfig[form.sitio]?.restriccion_horaria}
               C={C}
             />
           </div>
@@ -1134,11 +1149,15 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:10}}>
               <div>
                 <label style={lbl}>Hora ingreso <span style={{color:C.red}}>*</span></label>
-                <input type="time" value={form.horaInicio} onChange={e=>set('horaInicio',e.target.value)} style={inp}/>
+                <input type="time" value={form.horaInicio} onChange={e=>set('horaInicio',e.target.value)} style={inp}
+                  min={sitiosConfig[form.sitio]?.restriccion_horaria?.activa ? sitiosConfig[form.sitio].restriccion_horaria.hora_desde : undefined}
+                  max={sitiosConfig[form.sitio]?.restriccion_horaria?.activa ? sitiosConfig[form.sitio].restriccion_horaria.hora_hasta : undefined}/>
               </div>
               <div>
                 <label style={lbl}>Hora salida <span style={{color:C.red}}>*</span></label>
-                <input type="time" value={form.horaFin} onChange={e=>set('horaFin',e.target.value)} style={inp}/>
+                <input type="time" value={form.horaFin} onChange={e=>set('horaFin',e.target.value)} style={inp}
+                  min={sitiosConfig[form.sitio]?.restriccion_horaria?.activa ? sitiosConfig[form.sitio].restriccion_horaria.hora_desde : undefined}
+                  max={sitiosConfig[form.sitio]?.restriccion_horaria?.activa ? sitiosConfig[form.sitio].restriccion_horaria.hora_hasta : undefined}/>
                 {form.desde===form.hasta && form.horaInicio && form.horaFin && form.horaFin <= form.horaInicio && (
                   <div style={{fontSize:11,color:C.red,marginTop:3}}>⛔ Hora salida debe ser mayor a hora de ingreso</div>
                 )}
@@ -1286,11 +1305,24 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
           <span style={{fontSize:12,color:C.orange,alignSelf:'center'}}>⚠ Completa los correos para continuar</span>
         )}
         <button onClick={handleSubmit}
-          disabled={submitting || !!hayConflictoFechas(form.desde,form.hasta) || !isValidEmail(form.correoMandante) || !isValidEmail(form.correoContratista) || Object.values(docInvalid).some(Boolean)}
-          style={{background:(submitting||hayConflictoFechas(form.desde,form.hasta)||!isValidEmail(form.correoMandante)||!isValidEmail(form.correoContratista))?C.gray3:C.red,
-            color:(submitting||!isValidEmail(form.correoMandante)||!isValidEmail(form.correoContratista))?C.gray4:'#fff',
+          disabled={
+            submitting ||
+            !form.sitio ||
+            !form.trabajo ||
+            !form.desde || !form.hasta ||
+            !form.horaInicio || !form.horaFin ||
+            form.trabajadores.filter(t=>t.nombre&&t.rut).length === 0 ||
+            !isValidEmail(form.correoMandante) || !isValidEmail(form.correoContratista) ||
+            !!(sitiosConfig[form.sitio]?.docs_requeridos?.some(d => !docsUploaded[d])) ||
+            Object.values(docInvalid).some(Boolean) ||
+            !!hayConflictoFechas(form.desde, form.hasta)
+          }
+          style={{
+            background: (!form.sitio||!form.trabajo||!form.desde||!form.hasta||!form.horaInicio||!form.horaFin||form.trabajadores.filter(t=>t.nombre&&t.rut).length===0||!isValidEmail(form.correoMandante)||!isValidEmail(form.correoContratista)||submitting||!!(sitiosConfig[form.sitio]?.docs_requeridos?.some(d=>!docsUploaded[d]))||Object.values(docInvalid).some(Boolean)||!!hayConflictoFechas(form.desde,form.hasta)) ? C.gray3 : C.red,
+            color: (!form.sitio||!form.trabajo||!form.desde||!form.hasta||!form.horaInicio||!form.horaFin||form.trabajadores.filter(t=>t.nombre&&t.rut).length===0||!isValidEmail(form.correoMandante)||!isValidEmail(form.correoContratista)||submitting) ? C.gray4 : '#fff',
             border:'none',borderRadius:4,padding:'9px 24px',fontWeight:700,
-            cursor:(submitting||!isValidEmail(form.correoMandante)||!isValidEmail(form.correoContratista))?'not-allowed':'pointer',fontSize:13}}>
+            cursor: (!form.sitio||!form.trabajo||!form.desde||!form.hasta||!form.horaInicio||!form.horaFin||form.trabajadores.filter(t=>t.nombre&&t.rut).length===0||!isValidEmail(form.correoMandante)||!isValidEmail(form.correoContratista)||submitting) ? 'not-allowed' : 'pointer',
+            fontSize:13}}>
           {submitting ? '⚡ Validando...' : 'Enviar Solicitud →'}
         </button>
       </div>
