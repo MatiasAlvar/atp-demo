@@ -1572,7 +1572,7 @@ const TabSitios = () => {
             <div style={{ padding: '14px 16px', background: '#F0F9FF', borderRadius: 8, border: '1px solid #BAE6FD' }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#0369A1', marginBottom: 10 }}>📋 Documentos requeridos en este sitio</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                {([...(TIPOS_DOCS_SITIO||[]), ...(sitiosConfig['__GLOBAL__']?.docs_requeridos || [])]).map(doc => (
+                {([...(TIPOS_DOCS_SITIO||[]), ...(cfg['__GLOBAL__']?.docs_requeridos || [])]).map(doc => (
                   <label key={doc} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, padding: '6px 8px', borderRadius: 5, background: (form.docs_requeridos||[]).includes(doc) ? '#DBEAFE' : '#fff', border: `1px solid ${(form.docs_requeridos||[]).includes(doc) ? '#93C5FD' : '#E5E7EB'}` }}>
                     <input type="checkbox" checked={(form.docs_requeridos||[]).includes(doc)}
                       onChange={e => setForm(f => ({
