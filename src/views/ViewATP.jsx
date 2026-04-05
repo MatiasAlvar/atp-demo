@@ -1572,7 +1572,7 @@ const TabSitios = () => {
             <div style={{ padding: '14px 16px', background: '#F0F9FF', borderRadius: 8, border: '1px solid #BAE6FD' }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#0369A1', marginBottom: 10 }}>📋 Documentos requeridos en este sitio</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                {([...(TIPOS_DOCS_SITIO||[]), ...(() => { try { return JSON.parse(localStorage.getItem(DOCS_STORAGE_KEY)||'[]') } catch { return [] } })()]).map(doc => (
+                {([...(TIPOS_DOCS_SITIO||[]), ...(sitiosConfig['__GLOBAL__']?.docs_requeridos || [])]).map(doc => (
                   <label key={doc} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, padding: '6px 8px', borderRadius: 5, background: (form.docs_requeridos||[]).includes(doc) ? '#DBEAFE' : '#fff', border: `1px solid ${(form.docs_requeridos||[]).includes(doc) ? '#93C5FD' : '#E5E7EB'}` }}>
                     <input type="checkbox" checked={(form.docs_requeridos||[]).includes(doc)}
                       onChange={e => setForm(f => ({
@@ -1663,33 +1663,49 @@ const TabSitios = () => {
    TAB DOCS PARA SITIOS — gestionar tipos de documentos
    ════════════════════════════════════════════════════════════ */
 const DOCS_STORAGE_KEY = 'atp_tipos_docs_custom'
+const GLOBAL_SITIO_ID  = '__GLOBAL__'
 
 const TabDocsSitios = () => {
-  const [docs, setDocs]       = useState(() => {
-    try { return JSON.parse(localStorage.getItem(DOCS_STORAGE_KEY) || '[]') }
-    catch { return [] }
-  })
+  const [docs, setDocs]         = useState([])
   const [nuevoDoc, setNuevoDoc] = useState('')
   const [saved, setSaved]       = useState(false)
+  const [loading, setLoading]   = useState(true)
+
+  // Cargar docs custom desde Supabase fila __GLOBAL__
+  useEffect(() => {
+    supabase.from('sitios_config').select('docs_requeridos').eq('sitio_id', GLOBAL_SITIO_ID).single()
+      .then(({ data }) => {
+        if (data?.docs_requeridos) setDocs(data.docs_requeridos)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [])
 
   const allDocs = [...(TIPOS_DOCS_SITIO || []), ...docs]
 
-  const agregar = () => {
+  const guardarEnSupabase = async (next) => {
+    await supabase.from('sitios_config').upsert(
+      { sitio_id: GLOBAL_SITIO_ID, docs_requeridos: next },
+      { onConflict: 'sitio_id' }
+    )
+  }
+
+  const agregar = async () => {
     const nombre = nuevoDoc.trim()
     if (!nombre || allDocs.includes(nombre)) return
     const next = [...docs, nombre]
     setDocs(next)
-    localStorage.setItem(DOCS_STORAGE_KEY, JSON.stringify(next))
+    await guardarEnSupabase(next)
     setNuevoDoc('')
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
 
-  const eliminar = (doc) => {
-    if (TIPOS_DOCS_SITIO?.includes(doc)) return // no eliminar los base
+  const eliminar = async (doc) => {
+    if (TIPOS_DOCS_SITIO?.includes(doc)) return
     const next = docs.filter(d => d !== doc)
     setDocs(next)
-    localStorage.setItem(DOCS_STORAGE_KEY, JSON.stringify(next))
+    await guardarEnSupabase(next)
   }
 
   return (
@@ -1713,7 +1729,8 @@ const TabDocsSitios = () => {
             />
             <Btn variant="primary" onClick={agregar} icon={Ic.plus}>Agregar</Btn>
           </div>
-          {saved && <div style={{ fontSize: 12, color: '#15803D', marginBottom: 12 }}>✓ Documento agregado</div>}
+          {loading && <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 12 }}>⏳ Cargando...</div>}
+          {saved && <div style={{ fontSize: 12, color: '#15803D', marginBottom: 12 }}>✓ Documento guardado en Supabase</div>}
 
           {/* Lista completa */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
