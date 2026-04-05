@@ -112,7 +112,6 @@ export default function ViewOperador({ user, onLogout }) {
             {id:'lista', icon:'📋', label:'Mis Solicitudes'},
             {id:'nueva', icon:'➕', label:'Nueva Solicitud'},
             {id:'ia',    icon:'✨', label:'Carga con IA', badge:'IA',badgeColor:C.purple},
-            {id:'empresas', icon:'🏢', label:'Empresas Habilitadas'},
           ].map(n=>(
             <div key={n.id} onClick={()=>setView(n.id)} style={{display:'flex',alignItems:'center',gap:9,padding:'8px 14px',background:view===n.id?'#FFEBEE':C.white,borderLeft:view===n.id?`3px solid ${C.red}`:'3px solid transparent',cursor:'pointer'}}>
               <span style={{fontSize:13}}>{n.icon}</span>
@@ -168,7 +167,7 @@ export default function ViewOperador({ user, onLogout }) {
           {!loading && view==='nueva' && (
             <FormNuevaSolicitud
               user={user} solicitudes={solicitudes} setSolicitudes={setSolicitudes}
-              trabajadores={trabajadores} setTrabajadores={setTrabajadores} empresas={empresas} setEmpresas={setEmpresas}
+              trabajadores={trabajadores} empresas={empresas} setEmpresas={setEmpresas}
               alertas={alertas} reglas={reglas} sitiosConfig={sitiosConfig}
               showNotif={showNotif} onBack={()=>{setView('lista');setPreFilledData(null)}}
               initialData={preFilledData}
@@ -177,9 +176,6 @@ export default function ViewOperador({ user, onLogout }) {
 
           {!loading && view==='ia' && (
             <TabIA apiKey={apiKey} onPreFill={d=>{setPreFilledData(d);setView('nueva')}} showNotif={showNotif}/>
-          )}
-          {view==='empresas' && (
-            <TabEmpresasHabilitadas user={user} C={C} showNotif={showNotif}/>
           )}
         </div>
       </div>
@@ -409,91 +405,6 @@ function DateRangePicker({ desde, hasta, onDesde, onHasta, fechasOcupadas, maxDi
   )
 }
 
-
-/* ─── TAB EMPRESAS HABILITADAS — carga Excel por operador ─── */
-function TabEmpresasHabilitadas({ user, C, showNotif }) {
-  const KEY = 'atp_empresas_' + (user.operador || 'global')
-  const [lista, setLista]   = useState(() => { try { return JSON.parse(localStorage.getItem(KEY)||'[]') } catch { return [] } })
-  const [loading, setLoading] = useState(false)
-
-  async function handleExcel(e) {
-    const file = e.target.files[0]
-    if (!file) return
-    setLoading(true)
-    try {
-      const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs')
-      const buf = await file.arrayBuffer()
-      const wb  = XLSX.read(buf)
-      const ws  = wb.Sheets[wb.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' })
-      const parsed = rows.map(r => {
-        const nombre = (r['empresa contratista'] || r['Empresa Contratista'] || r['nombre'] || r['Nombre'] || Object.values(r)[0] || '').toString().trim()
-        const rut    = (r['rut'] || r['RUT'] || r['Rut'] || Object.values(r)[1] || '').toString().trim()
-        return { nombre, rut }
-      }).filter(r => r.nombre && r.rut)
-      if (!parsed.length) { showNotif('❌ No se encontraron datos válidos. Usa columnas: "empresa contratista" y "rut"', 'error'); setLoading(false); return }
-      setLista(parsed)
-      localStorage.setItem(KEY, JSON.stringify(parsed))
-      showNotif(`✅ ${parsed.length} empresas cargadas para ${user.operador}`, 'success')
-    } catch(err) {
-      showNotif('❌ Error leyendo el Excel: ' + err.message, 'error')
-    }
-    setLoading(false)
-    e.target.value = ''
-  }
-
-  const limpiar = () => {
-    setLista([])
-    localStorage.removeItem(KEY)
-    showNotif('Lista de empresas limpiada', 'success')
-  }
-
-  return (
-    <div style={{padding:'20px 24px'}}>
-      <div style={{fontWeight:700,fontSize:16,marginBottom:4}}>🏢 Empresas Habilitadas</div>
-      <div style={{fontSize:12,color:C.textS,marginBottom:16}}>
-        Carga el Excel mensual de empresas contratistas autorizadas para <strong>{user.operador}</strong>.<br/>
-        Solo esas empresas aparecerán disponibles al crear solicitudes desde esta cuenta.<br/>
-        Columnas requeridas: <code>empresa contratista</code> · <code>rut</code>
-      </div>
-
-      <div style={{display:'flex',gap:10,marginBottom:20,alignItems:'center'}}>
-        <label style={{background:C.blue,color:'#fff',borderRadius:5,padding:'8px 18px',fontWeight:700,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',gap:7}}>
-          📂 {loading ? 'Cargando...' : 'Subir Excel (.xlsx)'}
-          <input type="file" accept=".xlsx,.xls,.csv" style={{display:'none'}} onChange={handleExcel} disabled={loading}/>
-        </label>
-        {lista.length > 0 && (
-          <button onClick={limpiar} style={{background:C.redL,color:C.red,border:`1px solid ${C.red}44`,borderRadius:5,padding:'8px 14px',fontWeight:600,fontSize:13,cursor:'pointer'}}>
-            Limpiar lista ({lista.length})
-          </button>
-        )}
-      </div>
-
-      {lista.length === 0 ? (
-        <div style={{background:C.gray1,borderRadius:8,padding:24,textAlign:'center',color:C.textS,fontSize:13}}>
-          <div style={{fontSize:32,marginBottom:8}}>📋</div>
-          No hay lista cargada. Se mostrarán todas las empresas del sistema.
-        </div>
-      ) : (
-        <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden'}}>
-          <div style={{padding:'10px 16px',background:C.gray1,borderBottom:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <span style={{fontWeight:700,fontSize:13}}>{lista.length} empresas habilitadas</span>
-            <span style={{fontSize:11,color:C.textS}}>Solo estas aparecerán al buscar contratistas</span>
-          </div>
-          <div style={{maxHeight:360,overflowY:'auto'}}>
-            {lista.map((e,i) => (
-              <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'9px 16px',borderBottom:`1px solid ${C.gray2}`,fontSize:13}}>
-                <span style={{fontWeight:500}}>{e.nombre}</span>
-                <span style={{fontFamily:'monospace',color:C.textS,fontSize:12}}>{e.rut}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 /* ─── SITIO SEARCHBOX — combobox con 772 sitios ─────────── */
 function SitioSearchBox({ sitios, value, onChange, inp, C }) {
   const [q, setQ] = useState('')
@@ -560,7 +471,7 @@ function SitioSearchBox({ sitios, value, onChange, inp, C }) {
   )
 }
 
-function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, setTrabajadores, empresas, setEmpresas, alertas, reglas, sitiosConfig, showNotif, onBack, initialData }) {
+function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, empresas, setEmpresas, alertas, reglas, sitiosConfig, showNotif, onBack, initialData }) {
   const [form, setForm] = useState({
     operador: user.operador,
     empresa: initialData?.rut_empresa || '',
@@ -597,22 +508,13 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, s
 
   const mySitios = TODOS_SITIOS.filter(s => { const cols = COLOCALIZACIONES[s.id]||[]; return cols.length===0 ? true : cols.includes(user.operador) })
 
-  const empresasDelOperador = useMemo(() => {
-    const key = 'atp_empresas_' + (user.operador || 'global')
-    try {
-      const saved = JSON.parse(localStorage.getItem(key) || '[]')
-      if (saved.length > 0) return saved  // usar lista del operador si existe
-    } catch {}
-    return empresas  // fallback: todas
-  }, [empresas, user.operador])
-
   const empresasFiltradas = useMemo(() => {
     if (!empresaBusq || empresaBusq.length < 2) return []
-    return empresasDelOperador.filter(e =>
+    return empresas.filter(e =>
       e.nombre.toLowerCase().includes(empresaBusq.toLowerCase()) ||
       e.rut.includes(empresaBusq)
     )
-  }, [empresaBusq, empresasDelOperador])
+  }, [empresaBusq, empresas])
 
   async function handleSitioChange(sitioId) {
     set('sitio', sitioId)
@@ -676,25 +578,6 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, s
           return `El ${iso} es feriado. Este sitio solo permite acceso en días hábiles.`
       }
     }
-    // Feriados extra del sitio
-    if (regla.feriados_extra) {
-      const extras = regla.feriados_extra.split(',').map(f => f.trim()).filter(Boolean)
-      const d = new Date(desde + 'T12:00:00')
-      const h = new Date(hasta + 'T12:00:00')
-      for (let dt = new Date(d); dt <= h; dt.setDate(dt.getDate()+1)) {
-        const iso = dt.toISOString().split('T')[0]
-        if (extras.includes(iso)) return `El ${iso} está bloqueado en este sitio. Elige otras fechas.`
-      }
-    }
-    return null
-  }
-
-  // Validar ventana horaria del sitio
-  function validarHoraConReglas(horaInicio, horaFin, sitioId) {
-    const regla = reglas[sitioId]
-    if (!regla?.hora_inicio || !regla?.hora_fin) return null
-    if (horaInicio < regla.hora_inicio) return `Este sitio solo permite ingreso desde las ${regla.hora_inicio} hrs.`
-    if (horaFin > regla.hora_fin)       return `Este sitio solo permite salida hasta las ${regla.hora_fin} hrs.`
     return null
   }
 
@@ -727,7 +610,6 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, s
 
   async function handleSubmit() {
     const trab = form.trabajadores.filter(t => t.nombre && t.rut)
-    if (trab.length === 0) { showNotif('❌ Debes indicar al menos un técnico con nombre y RUT', 'error'); return }
     // Check no-acreditado
     const noAcred = trab.find(t => acreditado(t.rut) === false)
     if (noAcred) {
@@ -744,10 +626,6 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, s
     // Validar horas
     if (!form.horaInicio || !form.horaFin) { showNotif('❌ Ingresa la hora de ingreso y salida', 'error'); return }
     if (form.desde === form.hasta && form.horaFin <= form.horaInicio) { showNotif('❌ La hora de salida debe ser mayor a la hora de ingreso', 'error'); return }
-    if (form.sitio) {
-      const horaErr = validarHoraConReglas(form.horaInicio, form.horaFin, form.sitio)
-      if (horaErr) { showNotif(`❌ ${horaErr}`, 'error'); return }
-    }
     // Bloquear si hay conflicto de fechas
     const conflicto = hayConflictoFechas(form.desde, form.hasta)
     if (conflicto) {
@@ -1073,14 +951,6 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, s
                   <div style={{fontSize:11,color:C.red,marginTop:3}}>⛔ Hora salida debe ser mayor a hora de ingreso</div>
                 )}
               </div>
-            </div>
-          )}
-          {/* Restricción horaria del sitio */}
-          {form.sitio && reglas[form.sitio]?.hora_inicio && (
-            <div style={{background:'#FFF7ED',border:'1px solid #FED7AA',borderRadius:4,padding:'7px 11px',fontSize:12,color:'#C2410C',marginBottom:8}}>
-              ⏰ Este sitio solo permite acceso de <strong>{reglas[form.sitio].hora_inicio}</strong> a <strong>{reglas[form.sitio].hora_fin}</strong> hrs.
-              {reglas[form.sitio].no_fines_semana && ' · Sin acceso fines de semana.'}
-              {reglas[form.sitio].solo_dias_habiles && ' · Solo días hábiles.'}
             </div>
           )}
           {/* Aviso inline de reglas del sitio */}
