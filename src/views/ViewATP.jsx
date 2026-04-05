@@ -10,6 +10,18 @@ import {
   ATPLogo, Ic, Badge, Card, CardHeader, Btn, Timeline, STATE_COLORS,
 } from '../shared/components'
 
+
+/* ─── HELPERS GLOBALES ──────────────────────────────────── */
+function diasEsperando(sol) {
+  if (sol.estado !== 'En Gestión Propietario') return 0
+  if (!sol.tsEnviado) return 0
+  return Math.floor((Date.now() - new Date(sol.tsEnviado).getTime()) / 86400000)
+}
+function isCriticalSite(sitioId, sols) {
+  const hace30 = new Date(Date.now() - 30 * 86400000)
+  return sols.filter(s => s.sitio === sitioId && s.estado === 'Rechazado' && s.tsEnviado && new Date(s.tsEnviado) > hace30).length >= 3
+}
+
 /* ─── LEAFLET CDN LOADER ────────────────────────────────── */
 const useLeaflet = () => {
   const [ready, setReady] = useState(!!window.L)
@@ -83,7 +95,7 @@ const AtpSidebar = ({ active, setActive, pendWa, pendPend = 0 }) => (
   }}>
     {/* Logo */}
     <div style={{ padding: '20px 18px 16px', borderBottom: '1px solid #F0F0F0' }}>
-      <ATPLogo variant="compact" height={36} />
+      <ATPLogo variant="full" height={40} style={{ filter: "brightness(0) invert(1)" }} />
       <div style={{ marginTop: 12, padding: '5px 10px', background: '#FEF3C7', borderRadius: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
         <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#22C55E', flexShrink: 0 }} />
         <span className="mono" style={{ fontSize: 10, color: '#92400E', letterSpacing: .5 }}>ATP Admin · Sistema activo</span>
@@ -195,7 +207,7 @@ const WeatherWidget = ({ sols }) => {
     })).then(results => {
       setAlerts(results.filter(Boolean))
       setLoading(false)
-    })
+    }).catch(() => setLoading(false))
   }, [sols])
 
   if (loading) return null
@@ -554,15 +566,10 @@ const SitesMapRelieve = ({ sites = SITES, height = 580, criticalIds = [] }) => {
     })
 
     // Tile relieve ESRI + overlay azul mar
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}', {
-      maxZoom: 19,
+    L.tileLayer('https://tile.opentopomap.org/{z}/{x}/{y}.png', {
+      maxZoom: 17,
+      attribution: '© OpenTopoMap',
     }).addTo(map)
-
-    // Overlay CSS para colorear el mar
-    const style = document.createElement('style')
-    style.id = 'map-relieve-style'
-    style.textContent = '.leaflet-tile-pane { filter: hue-rotate(180deg) saturate(0.3) brightness(1.1); } .leaflet-marker-pane, .leaflet-popup-pane { filter: none !important; }'
-    document.head.appendChild(style)
 
     sites.forEach(site => {
       const isCritical = criticalIds.includes(site.id)
@@ -586,7 +593,6 @@ const SitesMapRelieve = ({ sites = SITES, height = 580, criticalIds = [] }) => {
     inst.current = map
     return () => {
       if (inst.current) { inst.current.remove(); inst.current = null }
-      document.getElementById('map-relieve-style')?.remove()
     }
   }, [leafletReady])
 
@@ -778,6 +784,7 @@ CONTEXTO COMPLETO DE LA SOLICITUD:
 - Operadora: ${sol.empresa}
 - Descripción del trabajo: ${sol.trabajo}
 - Fecha de ingreso: ${sol.desde} → ${sol.hasta}
+- Hora ingreso: ${sol.horaInicio||'—'} · Hora salida: ${sol.horaFin||'—'}
 - Empresa contratista: ${sol.empresaNombre || sol.empresa}
 - Trabajadores: ${(sol.trabajadores||[]).map(t=>`${t.nombre||'—'} (RUT: ${t.rut||'—'})`).join(', ') || '—'}
 - ${horario}
@@ -789,7 +796,8 @@ INSTRUCCIONES DE COMPORTAMIENTO:
 4. Si el propietario RECHAZA (dice "no", "rechazo", "no autorizo", "no puedo", "imposible") Y da un motivo — confirma el rechazo con el motivo y escribe al final: <<ACCION:RECHAZAR:motivo_aqui>>
 5. Si el propietario rechaza SIN DAR MOTIVO — pide el motivo amablemente (sin incluir ningún tag <<ACCION>>).
 6. Si hay dudas o preguntas — responde solo con información real del contexto.
-7. NUNCA incluyas el tag <<ACCION>> en respuestas que no sean una autorización o rechazo confirmado.
+7. Si preguntan por horario de llegada o salida, responde con las horas exactas: ingreso ${sol.horaInicio||'—'} y salida ${sol.horaFin||'—'}.
+8. NUNCA incluyas el tag <<ACCION>> en respuestas que no sean una autorización o rechazo confirmado.
 
 CONTEXTO TÉCNICO ADICIONAL (úsalo si es relevante):
 - Altura de la estructura: ${site?.alturaTotal || site?.altTotal || '—'}m | Tipo: ${site?.tipo || '—'}
@@ -1258,7 +1266,11 @@ const TabHistorial = ({ sols }) => {
   const filtered = sols.filter(s => {
     if (fil.estado && s.estado !== fil.estado) return false
     if (fil.sitio  && s.sitio !== fil.sitio) return false
-    if (fil.q && !s.id.toLowerCase().includes(fil.q.toLowerCase()) && !SITES.find(x=>x.id===s.sitio)?.nombre||s.sitio.toLowerCase().includes(fil.q.toLowerCase())) return false
+    if (fil.q) {
+      const ql = fil.q.toLowerCase()
+      const nombre = SITES.find(x=>x.id===s.sitio)?.nombre || s.sitio
+      if (!s.id.toLowerCase().includes(ql) && !nombre.toLowerCase().includes(ql)) return false
+    }
     return true
   })
   const paged = filtered.slice((pg - 1) * PP, pg * PP)
@@ -1301,7 +1313,7 @@ const TabHistorial = ({ sols }) => {
                   <td className="mono" style={{ padding: '13px 16px', fontSize: 12, color: G, fontWeight: 600 }}>{s.id}</td>
                   <td style={{ padding: '13px 16px', fontSize: 13, fontWeight: 600, color: BK }}>{SITES.find(x=>x.id===s.sitio)?.nombre||s.sitio}</td>
                   <td style={{ padding: '13px 16px', fontSize: 12, color: '#6B7280', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.trabajo}</td>
-                  <td className="mono" style={{ padding: '13px 16px', fontSize: 12, color: '#374151' }}>{s.fechaIngreso}</td>
+                  <td className="mono" style={{ padding: '13px 16px', fontSize: 12, color: '#374151' }}>{s.desde||s.fechaIngreso||'—'}</td>
                   <td style={{ padding: '13px 16px', fontSize: 12, color: '#374151' }}>{s.empresa}</td>
                   <td style={{ padding: '13px 16px' }}><Badge label={s.estado} /></td>
                 </tr>
@@ -1375,6 +1387,11 @@ const TabSitios = () => {
       bloqueado:      c.bloqueado     ?? false,
       motivo_bloqueo: c.motivo_bloqueo || '',
       docs_requeridos: c.docs_requeridos || [],
+      restriccion_activa:  c.restriccion_horaria?.activa    ?? false,
+      restriccion_desde:   c.restriccion_horaria?.hora_desde || '',
+      restriccion_hasta:   c.restriccion_horaria?.hora_hasta || '',
+      restriccion_dias:    c.restriccion_horaria?.dias       || ['Lunes','Martes','Miércoles','Jueves','Viernes'],
+      restriccion_habiles: c.restriccion_horaria?.solo_habiles ?? false,
     })
   }
 
@@ -1399,6 +1416,13 @@ const TabSitios = () => {
       bloqueado:      form.bloqueado,
       motivo_bloqueo: form.motivo_bloqueo || '',
       docs_requeridos: form.docs_requeridos || [],
+      restriccion_horaria: {
+        activa:       form.restriccion_activa,
+        hora_desde:   form.restriccion_desde,
+        hora_hasta:   form.restriccion_hasta,
+        dias:         form.restriccion_dias,
+        solo_habiles: form.restriccion_habiles,
+      },
     })
     setCfg(p => ({ ...p, [sel.id]: { ...form, sitio_id: sel.id } }))
     setSaving(false)
@@ -1565,6 +1589,55 @@ const TabSitios = () => {
               {(form.docs_requeridos||[]).length > 0 && (
                 <div style={{ fontSize: 11, color: '#0369A1', marginTop: 8 }}>
                   {(form.docs_requeridos||[]).length} doc{(form.docs_requeridos||[]).length > 1 ? 's' : ''} requerido{(form.docs_requeridos||[]).length > 1 ? 's' : ''}
+                </div>
+              )}
+            </div>
+
+            {/* Restricción horaria */}
+            <div style={{ padding: '14px 16px', background: form.restriccion_activa ? '#FFF7ED' : '#F9FAFB', borderRadius: 8, border: `1px solid ${form.restriccion_activa ? '#FED7AA' : '#E5E7EB'}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: form.restriccion_activa ? 14 : 0 }}>
+                <button onClick={() => setForm(f => ({ ...f, restriccion_activa: !f.restriccion_activa }))}
+                  style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', background: form.restriccion_activa ? '#F59E0B' : '#D1D5DB', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
+                  <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: form.restriccion_activa ? 23 : 3, transition: 'left .2s' }} />
+                </button>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: form.restriccion_activa ? '#B45309' : BK }}>
+                    {form.restriccion_activa ? '⏰ Restricción horaria activa' : 'Sin restricción horaria'}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#6B7280' }}>Configura días y horas permitidos para acceso</div>
+                </div>
+              </div>
+              {form.restriccion_activa && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 5 }}>Hora inicio permitida</label>
+                      <input type="time" value={form.restriccion_desde} onChange={e => setForm(f => ({ ...f, restriccion_desde: e.target.value }))}
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #E5E7EB', fontSize: 13, fontFamily: 'IBM Plex Sans', outline: 'none' }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 5 }}>Hora fin permitida</label>
+                      <input type="time" value={form.restriccion_hasta} onChange={e => setForm(f => ({ ...f, restriccion_hasta: e.target.value }))}
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #E5E7EB', fontSize: 13, fontFamily: 'IBM Plex Sans', outline: 'none' }} />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 8 }}>Días permitidos</label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'].map(dia => (
+                        <label key={dia} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', fontSize: 12, padding: '4px 10px', borderRadius: 20, background: (form.restriccion_dias||[]).includes(dia) ? '#FEF3C7' : '#F3F4F6', border: `1px solid ${(form.restriccion_dias||[]).includes(dia) ? '#F59E0B' : '#E5E7EB'}`, fontWeight: (form.restriccion_dias||[]).includes(dia) ? 700 : 400 }}>
+                          <input type="checkbox" checked={(form.restriccion_dias||[]).includes(dia)}
+                            onChange={e => setForm(f => ({ ...f, restriccion_dias: e.target.checked ? [...(f.restriccion_dias||[]), dia] : (f.restriccion_dias||[]).filter(d => d !== dia) }))}
+                            style={{ accentColor: '#F59E0B', margin: 0 }} />
+                          {dia}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                    <input type="checkbox" checked={form.restriccion_habiles} onChange={e => setForm(f => ({ ...f, restriccion_habiles: e.target.checked }))} style={{ accentColor: '#F59E0B' }} />
+                    Solo días hábiles (excluye feriados nacionales)
+                  </label>
                 </div>
               )}
             </div>

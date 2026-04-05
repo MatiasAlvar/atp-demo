@@ -112,6 +112,7 @@ export default function ViewOperador({ user, onLogout }) {
             {id:'lista', icon:'📋', label:'Mis Solicitudes'},
             {id:'nueva', icon:'➕', label:'Nueva Solicitud'},
             {id:'ia',    icon:'✨', label:'Carga con IA', badge:'IA',badgeColor:C.purple},
+            {id:'empresas', icon:'🏢', label:'Empresas Habilitadas'},
           ].map(n=>(
             <div key={n.id} onClick={()=>setView(n.id)} style={{display:'flex',alignItems:'center',gap:9,padding:'8px 14px',background:view===n.id?'#FFEBEE':C.white,borderLeft:view===n.id?`3px solid ${C.red}`:'3px solid transparent',cursor:'pointer'}}>
               <span style={{fontSize:13}}>{n.icon}</span>
@@ -176,6 +177,9 @@ export default function ViewOperador({ user, onLogout }) {
 
           {!loading && view==='ia' && (
             <TabIA apiKey={apiKey} onPreFill={d=>{setPreFilledData(d);setView('nueva')}} showNotif={showNotif}/>
+          )}
+          {view==='empresas' && (
+            <TabEmpresasHabilitadas user={user} C={C} showNotif={showNotif}/>
           )}
         </div>
       </div>
@@ -405,6 +409,87 @@ function DateRangePicker({ desde, hasta, onDesde, onHasta, fechasOcupadas, maxDi
   )
 }
 
+
+/* ─── TAB EMPRESAS HABILITADAS ──────────────────────────── */
+function TabEmpresasHabilitadas({ user, C, showNotif }) {
+  const KEY = 'atp_empresas_' + (user.operador || 'global')
+  const [lista, setLista]     = useState(() => { try { return JSON.parse(localStorage.getItem(KEY)||'[]') } catch { return [] } })
+  const [loading, setLoading] = useState(false)
+
+  async function handleFile(e) {
+    const file = e.target.files[0]
+    if (!file) return
+    setLoading(true)
+    try {
+      // Load SheetJS from CDN
+      if (!window.XLSX) {
+        await new Promise((res, rej) => {
+          const s = document.createElement('script')
+          s.src = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js'
+          s.onload = res; s.onerror = rej
+          document.head.appendChild(s)
+        })
+      }
+      const buf = await file.arrayBuffer()
+      const wb  = window.XLSX.read(buf)
+      const ws  = wb.Sheets[wb.SheetNames[0]]
+      const rows = window.XLSX.utils.sheet_to_json(ws, { defval: '' })
+      const parsed = rows.map(r => {
+        const nombre = (r['empresa contratista'] || r['Empresa Contratista'] || r['nombre'] || r['Nombre'] || Object.values(r)[0] || '').toString().trim()
+        const rut    = (r['rut'] || r['RUT'] || r['Rut'] || Object.values(r)[1] || '').toString().trim()
+        return { nombre, rut }
+      }).filter(r => r.nombre && r.rut)
+      if (!parsed.length) { showNotif('❌ Sin datos válidos. Columnas: "empresa contratista" y "rut"', 'error'); setLoading(false); return }
+      setLista(parsed)
+      localStorage.setItem(KEY, JSON.stringify(parsed))
+      showNotif(`✅ ${parsed.length} empresas cargadas para ${user.operador}`, 'success')
+    } catch(err) { showNotif('❌ Error leyendo el archivo: ' + err.message, 'error') }
+    setLoading(false)
+    e.target.value = ''
+  }
+
+  return (
+    <div style={{padding:'20px 24px'}}>
+      <div style={{fontWeight:700,fontSize:16,marginBottom:4}}>🏢 Empresas Habilitadas</div>
+      <div style={{fontSize:12,color:C.textS,marginBottom:16}}>
+        Carga el Excel mensual de empresas autorizadas para <strong>{user.operador}</strong>.<br/>
+        Columnas requeridas: <code style={{background:C.gray1,padding:'1px 4px',borderRadius:3}}>empresa contratista</code> y <code style={{background:C.gray1,padding:'1px 4px',borderRadius:3}}>rut</code>
+      </div>
+      <div style={{display:'flex',gap:10,marginBottom:20,alignItems:'center'}}>
+        <label style={{background:C.blue,color:'#fff',borderRadius:5,padding:'8px 18px',fontWeight:700,fontSize:13,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:7}}>
+          📂 {loading ? 'Cargando...' : 'Subir Excel (.xlsx / .csv)'}
+          <input type="file" accept=".xlsx,.xls,.csv" style={{display:'none'}} onChange={handleFile} disabled={loading}/>
+        </label>
+        {lista.length > 0 && (
+          <button onClick={()=>{setLista([]);localStorage.removeItem(KEY);showNotif('Lista limpiada','success')}}
+            style={{background:C.redL,color:C.red,border:`1px solid ${C.red}44`,borderRadius:5,padding:'8px 14px',fontWeight:600,fontSize:13,cursor:'pointer'}}>
+            Limpiar ({lista.length})
+          </button>
+        )}
+      </div>
+      {lista.length === 0
+        ? <div style={{background:C.gray1,borderRadius:8,padding:24,textAlign:'center',color:C.textS,fontSize:13}}>
+            <div style={{fontSize:28,marginBottom:8}}>📋</div>
+            Sin lista cargada — se mostrarán todas las empresas del sistema.
+          </div>
+        : <div style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:8,overflow:'hidden'}}>
+            <div style={{padding:'10px 16px',background:C.gray1,borderBottom:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between'}}>
+              <span style={{fontWeight:700,fontSize:13}}>{lista.length} empresas habilitadas</span>
+            </div>
+            <div style={{maxHeight:360,overflowY:'auto'}}>
+              {lista.map((e,i)=>(
+                <div key={i} style={{display:'flex',justifyContent:'space-between',padding:'9px 16px',borderBottom:`1px solid ${C.gray2}`,fontSize:13}}>
+                  <span style={{fontWeight:500}}>{e.nombre}</span>
+                  <span style={{fontFamily:'monospace',color:C.textS,fontSize:12}}>{e.rut}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+      }
+    </div>
+  )
+}
+
 /* ─── SITIO SEARCHBOX — combobox con 772 sitios ─────────── */
 function SitioSearchBox({ sitios, value, onChange, inp, C }) {
   const [q, setQ] = useState('')
@@ -526,18 +611,28 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
   const [sitioBloquedoModal, setSitioBloquedoModal] = useState(null)
   const [docsUploaded, setDocsUploaded]             = useState({})  // {docName: File}
   const [docWarnings, setDocWarnings]               = useState({})  // {docName: warningMsg}
+  const [docInvalid, setDocInvalid]                 = useState({})  // {docName: true if AI rejected}
+  const [docValidating, setDocValidating]           = useState({})  // {docName: true while checking}
 
   const set = (k, v) => setForm(f => ({...f, [k]: v}))
 
   const mySitios = TODOS_SITIOS.filter(s => { const cols = COLOCALIZACIONES[s.id]||[]; return cols.length===0 ? true : cols.includes(user.operador) })
 
+  const empresasDelOperador = useMemo(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('atp_empresas_' + (user.operador||'global')) || '[]')
+      if (saved.length > 0) return saved
+    } catch {}
+    return empresas
+  }, [empresas, user.operador])
+
   const empresasFiltradas = useMemo(() => {
     if (!empresaBusq || empresaBusq.length < 2) return []
-    return empresas.filter(e =>
+    return empresasDelOperador.filter(e =>
       e.nombre.toLowerCase().includes(empresaBusq.toLowerCase()) ||
       e.rut.includes(empresaBusq)
     )
-  }, [empresaBusq, empresas])
+  }, [empresaBusq, empresasDelOperador])
 
   async function handleSitioChange(sitioId) {
     set('sitio', sitioId)
@@ -631,8 +726,45 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
     showNotif('✅ Empresa creada','success')
   }
 
+  async function validarDocConIA(docTipo, file) {
+    const apiKey = localStorage.getItem('atp_apikey')
+    if (!apiKey) return null // sin key, skip
+    try {
+      const base64 = await new Promise((res, rej) => {
+        const r = new FileReader()
+        r.onload = () => res(r.result.split(',')[1])
+        r.onerror = rej
+        r.readAsDataURL(file)
+      })
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 200,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } },
+              { type: 'text', text: `Eres un validador de documentos laborales. Analiza el PDF adjunto y responde SOLO con JSON sin markdown: {"valido": bool, "tipo_detectado": string, "razon": string}. El documento debe ser de tipo: "${docTipo}"` }
+            ]
+          }]
+        })
+      })
+      const data = await resp.json()
+      const text = data.content?.[0]?.text || '{}'
+      return JSON.parse(text.replace(/```json|```/g, '').trim())
+    } catch { return null }
+  }
+
   async function handleSubmit() {
     const trab = form.trabajadores.filter(t => t.nombre && t.rut)
+    if (trab.length === 0) { showNotif('❌ Debes indicar al menos un técnico con nombre y RUT', 'error'); return }
     // Check no-acreditado
     const noAcred = trab.find(t => acreditado(t.rut) === false)
     if (noAcred) {
@@ -825,6 +957,18 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
         </div>
         <SitioSearchBox sitios={mySitios} value={form.sitio} onChange={id => handleSitioChange(id)} inp={inp} C={C}/>
         {loadingFechas && <div style={{fontSize:12,color:C.textS,marginTop:8}}>⏳ Cargando disponibilidad del sitio...</div>}
+        {/* Banner restricción horaria */}
+        {form.sitio && sitiosConfig[form.sitio]?.restriccion_horaria?.activa && (() => {
+          const r = sitiosConfig[form.sitio].restriccion_horaria
+          return (
+            <div style={{marginTop:10,background:'#FFF7ED',border:'1px solid #FED7AA',borderRadius:6,padding:'10px 14px',fontSize:12,color:'#B45309'}}>
+              <div style={{fontWeight:700,marginBottom:4}}>⏰ Restricción horaria en este sitio</div>
+              {r.hora_desde && r.hora_hasta && <div>Horario permitido: <strong>{r.hora_desde} – {r.hora_hasta} hrs</strong></div>}
+              {r.dias?.length > 0 && <div>Días permitidos: <strong>{r.dias.join(', ')}</strong></div>}
+              {r.solo_habiles && <div>Solo días hábiles (sin feriados)</div>}
+            </div>
+          )
+        })()}
         {form.sitio && (() => {
           const sitio = TODOS_SITIOS.find(s => s.id === form.sitio)
           return sitio && (
@@ -839,7 +983,8 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
           <div style={{marginTop:12,background:'#EFF6FF',border:'1px solid #BFDBFE',borderRadius:6,padding:'12px 14px'}}>
             <div style={{fontWeight:700,fontSize:12,color:'#1D4ED8',marginBottom:10}}>📋 Documentos requeridos por este sitio</div>
             {sitiosConfig[form.sitio].docs_requeridos.map(doc => (
-              <div key={doc} style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,padding:'8px 10px',background:'#fff',borderRadius:6,border:`1px solid ${docsUploaded[doc]?'#86EFAC':'#E5E7EB'}`}}>
+              <div key={doc} style={{marginBottom:8}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 10px',background:'#fff',borderRadius:6,border:`1px solid ${docInvalid[doc]?'#FECACA':docsUploaded[doc]?'#86EFAC':'#E5E7EB'}`}}>
                 <div style={{fontSize:12,color:C.text,flex:1}}>
                   {docsUploaded[doc] ? <span style={{color:C.green}}>✓</span> : <span style={{color:C.red}}>⚠</span>} {doc}
                 </div>
@@ -858,8 +1003,24 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
                     } else {
                       setDocWarnings(p=>({...p,[doc]:null}))
                     }
+                    // Validación IA
+                    if (localStorage.getItem('atp_apikey')) {
+                      setDocValidating(p=>({...p,[doc]:true}))
+                      validarDocConIA(doc, f).then(res => {
+                        setDocValidating(p=>({...p,[doc]:false}))
+                        if (res && !res.valido) {
+                          setDocInvalid(p=>({...p,[doc]:`❌ IA: Documento inválido — ${res.razon} (detectado: ${res.tipo_detectado})`}))
+                        } else {
+                          setDocInvalid(p=>({...p,[doc]:null}))
+                        }
+                      }).catch(() => setDocValidating(p=>({...p,[doc]:false})))
+                    }
                   }}/>
                 </label>
+              </div>
+              {docValidating[doc] && <div style={{fontSize:11,color:'#6B7280',padding:'2px 4px'}}>⏳ Validando con IA…</div>}
+              {docInvalid[doc]    && <div style={{fontSize:11,color:'#B91C1C',padding:'2px 4px',background:'#FEF2F2',borderRadius:3,marginTop:2}}>{docInvalid[doc]}</div>}
+              {docWarnings[doc]   && !docInvalid[doc] && <div style={{fontSize:11,color:'#92400E',padding:'2px 4px'}}>{docWarnings[doc]}</div>}
               </div>
             ))}
             {sitiosConfig[form.sitio].docs_requeridos.some(d=>!docsUploaded[d]) && (
@@ -1125,7 +1286,7 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
           <span style={{fontSize:12,color:C.orange,alignSelf:'center'}}>⚠ Completa los correos para continuar</span>
         )}
         <button onClick={handleSubmit}
-          disabled={submitting || !!hayConflictoFechas(form.desde,form.hasta) || !isValidEmail(form.correoMandante) || !isValidEmail(form.correoContratista)}
+          disabled={submitting || !!hayConflictoFechas(form.desde,form.hasta) || !isValidEmail(form.correoMandante) || !isValidEmail(form.correoContratista) || Object.values(docInvalid).some(Boolean)}
           style={{background:(submitting||hayConflictoFechas(form.desde,form.hasta)||!isValidEmail(form.correoMandante)||!isValidEmail(form.correoContratista))?C.gray3:C.red,
             color:(submitting||!isValidEmail(form.correoMandante)||!isValidEmail(form.correoContratista))?C.gray4:'#fff',
             border:'none',borderRadius:4,padding:'9px 24px',fontWeight:700,
