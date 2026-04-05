@@ -623,7 +623,8 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
   const [fechasOcupadas, setFechasOcupadas] = useState([])  // [{desde,hasta,id,estado}]
   const [loadingFechas, setLoadingFechas]   = useState(false)
   const [sitioBloquedoModal, setSitioBloquedoModal] = useState(null)
-  const [docsUploaded, setDocsUploaded]             = useState({})  // {docName: File}
+  const [docsUploaded, setDocsUploaded]             = useState({})  // {docName: filename string}
+  const [docsFiles, setDocsFiles]                   = useState({})  // {docName: actual File object}
   const [docWarnings, setDocWarnings]               = useState({})  // {docName: warningMsg}
   const [docInvalid, setDocInvalid]                 = useState({})  // {docName: true if AI rejected}
   const [docValidating, setDocValidating]           = useState({})  // {docName: true while checking}
@@ -653,6 +654,10 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
     set('desde', '')
     set('hasta', '')
     setFechasOcupadas([])
+    setDocsUploaded({})
+    setDocsFiles({})
+    setDocInvalid({})
+    setDocWarnings({})
     if (!sitioId) return
     // Verificar si sitio está bloqueado
     const cfgBloqueo = sitiosConfig[sitioId]
@@ -787,7 +792,7 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
     }
     // Validar docs requeridos
     const docsReq = sitiosConfig[form.sitio]?.docs_requeridos || []
-    const docsFaltantes = docsReq.filter(d => !docsUploaded[d])
+    const docsFaltantes = docsReq.filter(d => !docsFiles[d])
     if (docsFaltantes.length > 0) {
       showNotif(`❌ Faltan documentos: ${docsFaltantes.join(', ')}`, 'error')
       return
@@ -795,6 +800,12 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
     // Validar horas
     if (!form.horaInicio || !form.horaFin) { showNotif('❌ Ingresa la hora de ingreso y salida', 'error'); return }
     if (form.desde === form.hasta && form.horaFin <= form.horaInicio) { showNotif('❌ La hora de salida debe ser mayor a la hora de ingreso', 'error'); return }
+    // Validar contra restricción horaria del sitio (sitiosConfig)
+    const rh = sitiosConfig[form.sitio]?.restriccion_horaria
+    if (rh?.activa && rh.hora_desde && rh.hora_hasta) {
+      if (form.horaInicio < rh.hora_desde) { showNotif(`❌ Hora de ingreso fuera del rango permitido. Mínimo: ${rh.hora_desde}`, 'error'); return }
+      if (form.horaFin > rh.hora_hasta) { showNotif(`❌ Hora de salida fuera del rango permitido. Máximo: ${rh.hora_hasta}`, 'error'); return }
+    }
     // Bloquear si hay conflicto de fechas
     const conflicto = hayConflictoFechas(form.desde, form.hasta)
     if (conflicto) {
@@ -1011,6 +1022,7 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
                     const trab = form.trabajadores?.filter(t=>t.rut)
                     const normalized = normalizeDocName(doc, f.name, trab?.[0]?.rut||'')
                     setDocsUploaded(p=>({...p,[doc]:normalized}))
+                    setDocsFiles(p=>({...p,[doc]:f}))  // guardar archivo real
                     const hasRut = rutInFilename(f.name, trab)
                     if (!hasRut && trab?.length > 0) {
                       setDocWarnings(p=>({...p,[doc]:'⚠ El archivo no contiene el RUT del técnico — renombrado automáticamente'}))
@@ -1304,27 +1316,28 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
         {(!isValidEmail(form.correoMandante) || !isValidEmail(form.correoContratista)) && (
           <span style={{fontSize:12,color:C.orange,alignSelf:'center'}}>⚠ Completa los correos para continuar</span>
         )}
-        <button onClick={handleSubmit}
-          disabled={
-            submitting ||
-            !form.sitio ||
-            !form.trabajo ||
-            !form.desde || !form.hasta ||
-            !form.horaInicio || !form.horaFin ||
-            form.trabajadores.filter(t=>t.nombre&&t.rut).length === 0 ||
-            !isValidEmail(form.correoMandante) || !isValidEmail(form.correoContratista) ||
-            !!(sitiosConfig[form.sitio]?.docs_requeridos?.some(d => !docsUploaded[d])) ||
-            Object.values(docInvalid).some(Boolean) ||
-            !!hayConflictoFechas(form.desde, form.hasta)
-          }
-          style={{
-            background: (!form.sitio||!form.trabajo||!form.desde||!form.hasta||!form.horaInicio||!form.horaFin||form.trabajadores.filter(t=>t.nombre&&t.rut).length===0||!isValidEmail(form.correoMandante)||!isValidEmail(form.correoContratista)||submitting||!!(sitiosConfig[form.sitio]?.docs_requeridos?.some(d=>!docsUploaded[d]))||Object.values(docInvalid).some(Boolean)||!!hayConflictoFechas(form.desde,form.hasta)) ? C.gray3 : C.red,
-            color: (!form.sitio||!form.trabajo||!form.desde||!form.hasta||!form.horaInicio||!form.horaFin||form.trabajadores.filter(t=>t.nombre&&t.rut).length===0||!isValidEmail(form.correoMandante)||!isValidEmail(form.correoContratista)||submitting) ? C.gray4 : '#fff',
-            border:'none',borderRadius:4,padding:'9px 24px',fontWeight:700,
-            cursor: (!form.sitio||!form.trabajo||!form.desde||!form.hasta||!form.horaInicio||!form.horaFin||form.trabajadores.filter(t=>t.nombre&&t.rut).length===0||!isValidEmail(form.correoMandante)||!isValidEmail(form.correoContratista)||submitting) ? 'not-allowed' : 'pointer',
-            fontSize:13}}>
-          {submitting ? '⚡ Validando...' : 'Enviar Solicitud →'}
-        </button>
+        {(() => {
+          const canSend = !!(
+            form.sitio && form.trabajo && form.empresa &&
+            form.desde && form.hasta &&
+            form.horaInicio && form.horaFin &&
+            form.trabajadores.filter(t=>t.nombre&&t.rut).length > 0 &&
+            isValidEmail(form.correoMandante) && isValidEmail(form.correoContratista) &&
+            !(sitiosConfig[form.sitio]?.docs_requeridos?.some(d => !docsFiles[d])) &&
+            !Object.values(docInvalid).some(Boolean) &&
+            !hayConflictoFechas(form.desde, form.hasta) &&
+            !submitting
+          )
+          return (
+            <button onClick={handleSubmit} disabled={!canSend}
+              style={{background:canSend?C.red:C.gray3, color:canSend?'#fff':C.gray4,
+                border:'none',borderRadius:4,padding:'9px 24px',fontWeight:700,
+                cursor:canSend?'pointer':'not-allowed',fontSize:13,
+                transition:'background .15s'}}>
+              {submitting ? '⚡ Validando...' : 'Enviar Solicitud →'}
+            </button>
+          )
+        })()}
       </div>
     </div>
   )
