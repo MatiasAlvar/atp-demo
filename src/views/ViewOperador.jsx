@@ -627,6 +627,7 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
   const [docsFiles, setDocsFiles]                   = useState({})  // {docName: actual File object}
   const [docWarnings, setDocWarnings]               = useState({})  // {docName: warningMsg}
   const [docInvalid, setDocInvalid]                 = useState({})  // {docName: true if AI rejected}
+  const [docModal, setDocModal]                     = useState(null) // {doc, razon} para popup
   const [docValidating, setDocValidating]           = useState({})  // {docName: true while checking}
 
   const set = (k, v) => setForm(f => ({...f, [k]: v}))
@@ -945,6 +946,24 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
           </div>
         </div>
       )}
+      {/* Modal doc inválido */}
+      {docModal && (
+        <div style={{position:'fixed',inset:0,background:'#00000077',display:'flex',alignItems:'center',justifyContent:'center',zIndex:999,padding:16}}>
+          <div style={{background:'#fff',borderRadius:10,padding:28,maxWidth:420,width:'100%',boxShadow:'0 16px 48px #0003'}}>
+            <div style={{fontSize:32,marginBottom:10,textAlign:'center'}}>❌</div>
+            <div style={{fontWeight:700,fontSize:16,color:C.red,marginBottom:8,textAlign:'center'}}>Documento no corresponde</div>
+            <div style={{fontSize:14,color:C.textS,marginBottom:6,textAlign:'center'}}>
+              <strong>{docModal.doc}</strong>
+            </div>
+            <div style={{fontSize:13,color:C.text,background:'#FEF2F2',border:'1px solid #FECACA',borderRadius:6,padding:'10px 14px',marginBottom:20,lineHeight:1.5}}>
+              {docModal.razon}
+            </div>
+            <button onClick={()=>setDocModal(null)} style={{width:'100%',background:C.blue,color:'#fff',border:'none',borderRadius:6,padding:'10px 0',fontWeight:700,cursor:'pointer',fontSize:14}}>
+              Reintentar — subir el documento correcto
+            </button>
+          </div>
+        </div>
+      )}
       {/* Nueva empresa modal */}
       {showNuevaEmpresa && (
         <div style={{position:'fixed',inset:0,background:'#00000066',display:'flex',alignItems:'center',justifyContent:'center',zIndex:998,padding:16}}>
@@ -1003,19 +1022,22 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
             </div>
           )
         })()}
-        {/* Docs requeridos por sitio */}
-        {form.sitio && sitiosConfig[form.sitio]?.docs_requeridos?.length > 0 && (
-          <div style={{marginTop:12,background:'#EFF6FF',border:'1px solid #BFDBFE',borderRadius:6,padding:'12px 14px'}}>
-            <div style={{fontWeight:700,fontSize:12,color:'#1D4ED8',marginBottom:10}}>📋 Documentos requeridos por este sitio</div>
-            {sitiosConfig[form.sitio].docs_requeridos.map(doc => (
-              <div key={doc} style={{marginBottom:8}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 10px',background:'#fff',borderRadius:6,border:`1px solid ${docInvalid[doc]?'#FECACA':docsUploaded[doc]?'#86EFAC':'#E5E7EB'}`}}>
+        {/* Docs requeridos por sitio — separados por categoría */}
+        {form.sitio && sitiosConfig[form.sitio]?.docs_requeridos?.length > 0 && (() => {
+          const DOC_TRAB_KEYS = ['CDT','CIF','CIP','contrato','carnet','identidad']
+          const allDocs = sitiosConfig[form.sitio].docs_requeridos
+          const docsTrab = allDocs.filter(d => DOC_TRAB_KEYS.some(k => d.toUpperCase().includes(k.toUpperCase())))
+          const docsEmp  = allDocs.filter(d => !DOC_TRAB_KEYS.some(k => d.toUpperCase().includes(k.toUpperCase())))
+          const DocItem = ({doc}) => (
+            <div key={doc} style={{marginBottom:8}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 10px',background:'#fff',borderRadius:6,border:`1px solid ${docInvalid[doc]?'#FECACA':docsFiles[doc]?'#86EFAC':'#E5E7EB'}`}}>
                 <div style={{fontSize:12,color:C.text,flex:1}}>
-                  {docsUploaded[doc] ? <span style={{color:C.green}}>✓</span> : <span style={{color:C.red}}>⚠</span>} {doc}
+                  {docsFiles[doc] ? <span style={{color:C.green}}>✓</span> : <span style={{color:C.red}}>⚠</span>} {doc}
+                  {docValidating[doc] && <span style={{fontSize:10,color:'#6B7280',marginLeft:6}}>⏳ Validando…</span>}
                 </div>
-                <label style={{cursor:'pointer',background:docsUploaded[doc]?C.greenL:C.blueL,color:docsUploaded[doc]?C.green:C.blue,border:'none',borderRadius:4,padding:'4px 10px',fontSize:11,fontWeight:700,flexShrink:0}}>
-                  {docsUploaded[doc] ? 'Cambiar' : 'Subir PDF'}
-                  <input type="file" accept=".pdf" style={{display:'none'}} onChange={e=>{
+                <label style={{cursor:'pointer',background:docsFiles[doc]?C.greenL:C.blueL,color:docsFiles[doc]?C.green:C.blue,border:'none',borderRadius:4,padding:'4px 10px',fontSize:11,fontWeight:700,flexShrink:0}}>
+                  {docsFiles[doc] ? 'Cambiar' : 'Subir PDF'}
+                  <input type="file" accept=".pdf" style={{display:'none'}} onChange={async e=>{
                     const f=e.target.files[0]
                     if(!f) return
                     if(f.size>5*1024*1024){alert('El archivo supera 5MB');return}
@@ -1023,37 +1045,87 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
                     const normalized = normalizeDocName(doc, f.name, trab?.[0]?.rut||'')
                     setDocsUploaded(p=>({...p,[doc]:normalized}))
                     setDocsFiles(p=>({...p,[doc]:f}))  // guardar archivo real
+                    // Leer base64 para validación IA
+                    let base64Data = ''
+                    await new Promise(resolve => {
+                      const rd = new FileReader()
+                      rd.onload = () => { base64Data = rd.result.split(',')[1]; resolve() }
+                      rd.readAsDataURL(f)
+                    })
                     const hasRut = rutInFilename(f.name, trab)
                     if (!hasRut && trab?.length > 0) {
                       setDocWarnings(p=>({...p,[doc]:'⚠ El archivo no contiene el RUT del técnico — renombrado automáticamente'}))
                     } else {
                       setDocWarnings(p=>({...p,[doc]:null}))
                     }
-                    // Validación IA
+                    // Validación IA con system prompt específico por tipo
                     if (localStorage.getItem('atp_apikey')) {
+                      const prompts = {
+                        'CDT': 'Verifica que este documento sea un Contrato de Trabajo (CDT). Responde SOLO JSON sin markdown: {"valido":bool,"razon":string}',
+                        'CIF': 'Verifica que este documento sea un Carnet de Identidad chileno (cara frontal). Responde SOLO JSON sin markdown: {"valido":bool,"razon":string}',
+                        'CIP': 'Verifica que este documento sea un Carnet de Identidad chileno (cara posterior). Responde SOLO JSON sin markdown: {"valido":bool,"razon":string}',
+                      }
+                      const docKey = Object.keys(prompts).find(k => doc.toUpperCase().includes(k))
+                      const prompt = prompts[docKey] || `Verifica que este documento sea: "${doc}". Responde SOLO JSON sin markdown: {"valido":bool,"razon":string}`
                       setDocValidating(p=>({...p,[doc]:true}))
-                      validarDocConIA(doc, f).then(res => {
+                      fetch('https://api.anthropic.com/v1/messages', {
+                        method:'POST',
+                        headers:{'Content-Type':'application/json','x-api-key':localStorage.getItem('atp_apikey'),'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+                        body: JSON.stringify({
+                          model:'claude-sonnet-4-20250514', max_tokens:150,
+                          messages:[{role:'user',content:[
+                            {type:'document',source:{type:'base64',media_type:'application/pdf',data:base64Data}},
+                            {type:'text',text:prompt}
+                          ]}]
+                        })
+                      }).then(r=>r.json()).then(data => {
                         setDocValidating(p=>({...p,[doc]:false}))
-                        if (res && !res.valido) {
-                          setDocInvalid(p=>({...p,[doc]:`❌ IA: Documento inválido — ${res.razon} (detectado: ${res.tipo_detectado})`}))
-                        } else {
-                          setDocInvalid(p=>({...p,[doc]:null}))
-                        }
-                      }).catch(() => setDocValidating(p=>({...p,[doc]:false})))
+                        try {
+                          const text = data.content?.[0]?.text || '{}'
+                          const res = JSON.parse(text.replace(/```json|```/g,'').trim())
+                          if (!res.valido) {
+                            setDocInvalid(p=>({...p,[doc]:true}))
+                            setDocModal({doc, razon: res.razon || 'El documento no corresponde al tipo solicitado'})
+                            setDocsUploaded(p=>({...p,[doc]:null}))
+                            setDocsFiles(p=>({...p,[doc]:null}))
+                          } else {
+                            setDocInvalid(p=>({...p,[doc]:null}))
+                          }
+                        } catch { setDocInvalid(p=>({...p,[doc]:null})) }
+                      }).catch(()=>setDocValidating(p=>({...p,[doc]:false})))
                     }
                   }}/>
                 </label>
               </div>
-              {docValidating[doc] && <div style={{fontSize:11,color:'#6B7280',padding:'2px 4px'}}>⏳ Validando con IA…</div>}
-              {docInvalid[doc]    && <div style={{fontSize:11,color:'#B91C1C',padding:'2px 4px',background:'#FEF2F2',borderRadius:3,marginTop:2}}>{docInvalid[doc]}</div>}
-              {docWarnings[doc]   && !docInvalid[doc] && <div style={{fontSize:11,color:'#92400E',padding:'2px 4px'}}>{docWarnings[doc]}</div>}
-              </div>
-            ))}
-            {sitiosConfig[form.sitio].docs_requeridos.some(d=>!docsUploaded[d]) && (
-              <div style={{fontSize:11,color:'#1D4ED8',marginTop:4}}>Sube todos los documentos para poder enviar la solicitud.</div>
-            )}
-          </div>
-        )}
+              {docWarnings[doc] && !docInvalid[doc] && <div style={{fontSize:11,color:'#92400E',padding:'2px 4px'}}>{docWarnings[doc]}</div>}
+              {docInvalid[doc] && <div style={{fontSize:11,color:'#B91C1C',padding:'2px 4px',background:'#FEF2F2',borderRadius:3,marginTop:2}}>❌ Documento inválido — sube el archivo correcto</div>}
+            </div>
+          )
+          return (
+            <div style={{marginTop:12,background:'#EFF6FF',border:'1px solid #BFDBFE',borderRadius:6,padding:'12px 14px'}}>
+              <div style={{fontWeight:700,fontSize:12,color:'#1D4ED8',marginBottom:12}}>📋 Documentos requeridos por este sitio</div>
+              {docsTrab.length > 0 && (
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'#374151',textTransform:'uppercase',letterSpacing:.5,marginBottom:7,display:'flex',alignItems:'center',gap:5}}>
+                    👷 Por trabajador
+                  </div>
+                  {docsTrab.map(doc => <DocItem key={doc} doc={doc}/>)}
+                </div>
+              )}
+              {docsEmp.length > 0 && (
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:'#374151',textTransform:'uppercase',letterSpacing:.5,marginBottom:7,display:'flex',alignItems:'center',gap:5}}>
+                    🏢 Por empresa
+                  </div>
+                  {docsEmp.map(doc => <DocItem key={doc} doc={doc}/>)}
+                </div>
+              )}
+              {allDocs.some(d=>!docsFiles[d]) && (
+                <div style={{fontSize:11,color:'#1D4ED8',marginTop:8}}>Sube todos los documentos para poder enviar la solicitud.</div>
+              )}
+            </div>
+          )
+        })()}
         {fechasOcupadas.length > 0 && (
           <div style={{marginTop:10,background:'#FFF3E0',border:'1px solid #FFB74D',borderRadius:6,padding:'10px 14px'}}>
             <div style={{fontWeight:700,fontSize:12,color:'#E65100',marginBottom:6}}>📅 Fechas ya reservadas en este sitio:</div>
