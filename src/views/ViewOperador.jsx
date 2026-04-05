@@ -471,6 +471,28 @@ function SitioSearchBox({ sitios, value, onChange, inp, C }) {
   )
 }
 
+
+/* ─── NORMALIZAR NOMBRE DOCUMENTO ───────────────────────── */
+function normalizeDocName(docTipo, fileName, rut) {
+  const ext = fileName.split('.').pop().toLowerCase()
+  const base = docTipo
+    .toUpperCase()
+    .replace(/\s+/g, '_')
+    .replace(/[^A-Z0-9_]/g, '')
+    .slice(0, 40)
+  const rutClean = (rut || '').replace(/[^0-9kK]/g, '')
+  return rutClean ? `${base}_${rutClean}.${ext}` : `${base}.${ext}`
+}
+
+function rutInFilename(fileName, trabajadores) {
+  if (!trabajadores?.length) return true // no hay técnicos aún, no bloquear
+  const fileL = fileName.toLowerCase().replace(/[^0-9k]/g, '')
+  return trabajadores.some(t => {
+    const rut = (t.rut || '').replace(/[^0-9kK]/g, '').toLowerCase()
+    return rut && rut.length > 3 && fileL.includes(rut)
+  })
+}
+
 function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, empresas, setEmpresas, alertas, reglas, sitiosConfig, showNotif, onBack, initialData }) {
   const [form, setForm] = useState({
     operador: user.operador,
@@ -503,6 +525,7 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
   const [loadingFechas, setLoadingFechas]   = useState(false)
   const [sitioBloquedoModal, setSitioBloquedoModal] = useState(null)
   const [docsUploaded, setDocsUploaded]             = useState({})  // {docName: File}
+  const [docWarnings, setDocWarnings]               = useState({})  // {docName: warningMsg}
 
   const set = (k, v) => setForm(f => ({...f, [k]: v}))
 
@@ -826,7 +849,15 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
                     const f=e.target.files[0]
                     if(!f) return
                     if(f.size>5*1024*1024){alert('El archivo supera 5MB');return}
-                    setDocsUploaded(p=>({...p,[doc]:f.name}))
+                    const trab = form.trabajadores?.filter(t=>t.rut)
+                    const normalized = normalizeDocName(doc, f.name, trab?.[0]?.rut||'')
+                    setDocsUploaded(p=>({...p,[doc]:normalized}))
+                    const hasRut = rutInFilename(f.name, trab)
+                    if (!hasRut && trab?.length > 0) {
+                      setDocWarnings(p=>({...p,[doc]:'⚠ El archivo no contiene el RUT del técnico — renombrado automáticamente'}))
+                    } else {
+                      setDocWarnings(p=>({...p,[doc]:null}))
+                    }
                   }}/>
                 </label>
               </div>

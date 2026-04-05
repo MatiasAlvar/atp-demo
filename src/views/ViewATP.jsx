@@ -65,7 +65,7 @@ const callClaude = async (messages, systemPrompt) => {
 /* ─── SIDEBAR ───────────────────────────────────────────── */
 const TABS = [
   { id: 'dashboard',   label: 'Dashboard',       Icon: Ic.home    },
-  { id: 'solicitudes', label: 'Solicitudes',      Icon: Ic.file    },
+  { id: 'solicitudes', label: 'Solicitudes',      Icon: Ic.file,   pendiente: true },
   { id: 'mapa',        label: 'Mapa de Sitios',   Icon: Ic.map     },
   { id: 'sitios',      label: 'Sitios / Contactos', Icon: Ic.tower  },
   { id: 'whatsapp',    label: 'WhatsApp IA',       Icon: Ic.msg,    badge: true },
@@ -73,9 +73,10 @@ const TABS = [
   { id: 'docs_sitios', label: 'Docs para Sitios',  Icon: Ic.file    },
   { id: 'historial',   label: 'Historial',        Icon: Ic.history },
   { id: 'config',      label: 'Configuración',    Icon: Ic.settings },
+  { id: 'alertas',     label: '🚨 Alertas',         Icon: Ic.warn },
 ]
 
-const AtpSidebar = ({ active, setActive, pendWa }) => (
+const AtpSidebar = ({ active, setActive, pendWa, pendPend = 0 }) => (
   <aside style={{
     width: 240, minHeight: '100vh', background: '#FFFFFF', borderRight: '1px solid #E5E7EB',
     display: 'flex', flexDirection: 'column', flexShrink: 0,
@@ -90,7 +91,7 @@ const AtpSidebar = ({ active, setActive, pendWa }) => (
     </div>
     {/* Nav */}
     <nav style={{ padding: '8px 0', flex: 1 }}>
-      {TABS.map(({ id, label, Icon, badge }) => {
+      {TABS.map(({ id, label, Icon, badge, pendiente }) => {
         const on = active === id
         return (
           <button key={id} onClick={() => setActive(id)} style={{
@@ -110,6 +111,13 @@ const AtpSidebar = ({ active, setActive, pendWa }) => (
                 fontSize: 10, fontWeight: 700, borderRadius: 10, padding: '1px 6px',
                 fontFamily: 'IBM Plex Mono',
               }}>{pendWa}</span>
+            )}
+            {pendiente && pendPend > 0 && (
+              <span style={{
+                marginLeft: 'auto', background: '#F59E0B', color: '#fff',
+                fontSize: 10, fontWeight: 700, borderRadius: 10, padding: '1px 6px',
+                fontFamily: 'IBM Plex Mono',
+              }}>{pendPend}</span>
             )}
           </button>
         )
@@ -149,6 +157,75 @@ const AtpHeader = ({ title, sub, onLogout }) => (
     </div>
   </header>
 )
+
+
+/* ─── WIDGET CLIMA — open-meteo.com sin API key ─────────── */
+const WeatherWidget = ({ sols }) => {
+  const [alerts, setAlerts] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const sitiosActivos = sols
+      .filter(s => ['Autorizado', 'En Gestión Propietario'].includes(s.estado))
+      .map(s => SITES.find(x => x.id === s.sitio))
+      .filter(Boolean)
+      .filter((s, i, arr) => arr.findIndex(x => x.id === s.id) === i)
+      .slice(0, 5) // max 5 consultas
+
+    if (!sitiosActivos.length) { setLoading(false); return }
+
+    Promise.all(sitiosActivos.map(async site => {
+      try {
+        const res = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${site.lat}&longitude=${site.lng}&current=wind_speed_10m,precipitation,weather_code&wind_speed_unit=kmh`
+        )
+        const data = await res.json()
+        const wind = data.current?.wind_speed_10m || 0
+        const rain = data.current?.precipitation || 0
+        const wcode = data.current?.weather_code || 0
+        const isStormy = wcode >= 95
+        if (wind > 60 || rain > 10 || isStormy) {
+          return {
+            site: site.nombre, id: site.id, region: site.region,
+            wind, rain, stormy: isStormy,
+          }
+        }
+        return null
+      } catch { return null }
+    })).then(results => {
+      setAlerts(results.filter(Boolean))
+      setLoading(false)
+    })
+  }, [sols])
+
+  if (loading) return null
+  if (!alerts.length) return (
+    <div style={{ marginTop: 14, padding: '10px 16px', background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: 8, fontSize: 12, color: '#15803D', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span>🌤</span> Sin alertas climáticas en sitios activos
+    </div>
+  )
+
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ fontWeight: 700, fontSize: 13, color: BK, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span>⛈</span> Alertas climáticas en sitios activos
+      </div>
+      {alerts.map((a, i) => (
+        <div key={i} style={{ padding: '10px 14px', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 8, marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 13, color: BK }}>{a.site}</div>
+            <div style={{ fontSize: 11, color: '#6B7280' }}>{a.region} · {a.id}</div>
+          </div>
+          <div style={{ display: 'flex', gap: 6, fontSize: 11 }}>
+            {a.wind > 60  && <span style={{ background: '#FEE2E2', color: '#B91C1C', borderRadius: 4, padding: '2px 7px', fontWeight: 700 }}>💨 {Math.round(a.wind)} km/h</span>}
+            {a.rain > 10  && <span style={{ background: '#DBEAFE', color: '#1D4ED8', borderRadius: 4, padding: '2px 7px', fontWeight: 700 }}>🌧 {a.rain} mm/h</span>}
+            {a.stormy     && <span style={{ background: '#FEF3C7', color: '#92400E', borderRadius: 4, padding: '2px 7px', fontWeight: 700 }}>⛈ Tormenta</span>}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 /* ════════════════════════════════════════════════════════════
    TAB DASHBOARD
@@ -241,6 +318,7 @@ const TabDashboard = ({ sols }) => {
           </Card>
         </div>
       </div>
+      <WeatherWidget sols={sols} />
     </div>
   )
 }
@@ -289,10 +367,15 @@ const TabSolicitudes = ({ sols, setSols }) => {
                   <Badge label={s.estado} />
                 </div>
                 <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.trabajo}</div>
-                <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#9CA3AF' }}>
+                <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#9CA3AF', flexWrap: 'wrap' }}>
                   <span>📅 {s.fechaIngreso}</span>
                   <span>👷 {s.contratista}</span>
                   {site?.whatsapp && <span style={{ color: WA }}>📲 WhatsApp</span>}
+                  {diasEsperando(s) > 2 && (
+                    <span style={{ background: '#FEF3C7', color: '#92400E', borderRadius: 4, padding: '1px 6px', fontWeight: 700, fontSize: 10 }}>
+                      ⏳ {diasEsperando(s)}d esperando
+                    </span>
+                  )}
                 </div>
                 <Timeline estado={s.estado} />
               </Card>
@@ -452,11 +535,71 @@ const SitesMapLeaflet = ({ sites = SITES, height = 520, zoom = 7, center = [-34.
   return <div ref={ref} style={{ height, width: '100%' }} />
 }
 
+
+/* ════════════════════════════════════════════════════════════
+   MAPA CON RELIEVE — componente separado, no modifica SitesMapLeaflet
+   ════════════════════════════════════════════════════════════ */
+const SitesMapRelieve = ({ sites = SITES, height = 580, criticalIds = [] }) => {
+  const leafletReady = useLeaflet()
+  const ref  = useRef(null)
+  const inst = useRef(null)
+
+  useEffect(() => {
+    if (!leafletReady || !ref.current || inst.current) return
+    const L = window.L
+
+    const map = L.map(ref.current, {
+      center: [-34.2, -70.85], zoom: 7,
+      zoomControl: true, scrollWheelZoom: false, attributionControl: false,
+    })
+
+    // Tile relieve ESRI + overlay azul mar
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+    }).addTo(map)
+
+    // Overlay CSS para colorear el mar
+    const style = document.createElement('style')
+    style.id = 'map-relieve-style'
+    style.textContent = '.leaflet-tile-pane { filter: hue-rotate(180deg) saturate(0.3) brightness(1.1); } .leaflet-marker-pane, .leaflet-popup-pane { filter: none !important; }'
+    document.head.appendChild(style)
+
+    sites.forEach(site => {
+      const isCritical = criticalIds.includes(site.id)
+      const color = isCritical ? '#EF4444' : site.whatsapp ? WA : site.estado === 'ocupado' ? '#F59E0B' : G
+      const pulse = isCritical ? `animation:criticalPulse 1.2s infinite;` : ''
+      const icon = L.divIcon({
+        html: `<div style="width:${isCritical?18:14}px;height:${isCritical?18:14}px;background:${color};border:2.5px solid #fff;border-radius:50%;box-shadow:0 0 0 3px ${color}44;cursor:pointer;${pulse}"></div>`,
+        className: '', iconSize: [isCritical?18:14, isCritical?18:14], iconAnchor: [isCritical?9:7, isCritical?9:7],
+      })
+      const m = L.marker([site.lat, site.lng], { icon })
+      m.bindPopup(`
+        <div style="font-family:'IBM Plex Sans',sans-serif;padding:14px;min-width:210px;background:#FFFFFF;color:#1A1A1A;border-radius:10px;border:1px solid #E5E7EB">
+          ${isCritical ? '<div style="background:#FEE2E2;color:#B91C1C;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:700;margin-bottom:8px">⚠ ZONA CRÍTICA</div>' : ''}
+          <div style="font-family:monospace;font-size:11px;color:${G};font-weight:600">${site.id}</div>
+          <div style="font-weight:700;font-size:15px;margin:4px 0 2px">${site.nombre}</div>
+          <div style="font-size:12px;color:#6B7280">${site.region} · ${site.tipo}</div>
+        </div>`, { maxWidth: 260 })
+      m.addTo(map)
+    })
+
+    inst.current = map
+    return () => {
+      if (inst.current) { inst.current.remove(); inst.current = null }
+      document.getElementById('map-relieve-style')?.remove()
+    }
+  }, [leafletReady])
+
+  if (!leafletReady) return <div style={{ height, width: '100%', background: '#E8F4F8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ fontSize: 13, color: '#9CA3AF' }}>Cargando mapa…</span></div>
+  return <div ref={ref} style={{ height, width: '100%' }} />
+}
+
 /* ════════════════════════════════════════════════════════════
    TAB MAPA — exacto de versión nueva
    ════════════════════════════════════════════════════════════ */
 const TabMapa = () => {
   const [filter, setFilter]     = useState('todos')
+  const [tileMode, setTileMode] = useState('claro')  // 'claro' | 'relieve'
   const [tablaQ, setTablaQ]     = useState('')
   const [tablaRegion, setTablaRegion] = useState('')
   const [tablaTipo, setTablaTipo]     = useState('')
@@ -526,9 +669,19 @@ const TabMapa = () => {
             <Ic.map w={16} h={16} style={{ color: G }} />
             <span style={{ color: '#fff', fontWeight: 700, fontSize: 14 }}>Infraestructura ATP Chile</span>
           </div>
-          <span className="mono" style={{ fontSize: 11, color: '#9CA3AF' }}>{filtered.length} sitios · CartoDB Light</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', background: 'rgba(255,255,255,.15)', borderRadius: 7, padding: 2, gap: 2 }}>
+              {[{ id: 'claro', label: '🗺 Normal' }, { id: 'relieve', label: '⛰ Relieve' }].map(t => (
+                <button key={t.id} onClick={() => setTileMode(t.id)} style={{ padding: '4px 10px', borderRadius: 5, fontSize: 11, fontWeight: 700, background: tileMode === t.id ? 'rgba(255,255,255,.9)' : 'transparent', color: tileMode === t.id ? BK : 'rgba(255,255,255,.7)', border: 'none', cursor: 'pointer', transition: 'all .15s' }}>{t.label}</button>
+              ))}
+            </div>
+            <span className="mono" style={{ fontSize: 11, color: 'rgba(255,255,255,.5)' }}>{filtered.length} sitios</span>
+          </div>
         </div>
-        <SitesMapLeaflet key={mapKey} sites={filtered} height={580} zoom={7} />
+        {tileMode === 'claro'
+          ? <SitesMapLeaflet key={mapKey + 'c'} sites={filtered} height={580} zoom={7} />
+          : <SitesMapRelieve key={mapKey + 'r'} sites={filtered} height={580} />
+        }
       </Card>
 
       {/* Buscador + tabla con filtros */}
@@ -636,7 +789,18 @@ INSTRUCCIONES DE COMPORTAMIENTO:
 4. Si el propietario RECHAZA (dice "no", "rechazo", "no autorizo", "no puedo", "imposible") Y da un motivo — confirma el rechazo con el motivo y escribe al final: <<ACCION:RECHAZAR:motivo_aqui>>
 5. Si el propietario rechaza SIN DAR MOTIVO — pide el motivo amablemente (sin incluir ningún tag <<ACCION>>).
 6. Si hay dudas o preguntas — responde solo con información real del contexto.
-7. NUNCA incluyas el tag <<ACCION>> en respuestas que no sean una autorización o rechazo confirmado.`
+7. NUNCA incluyas el tag <<ACCION>> en respuestas que no sean una autorización o rechazo confirmado.
+
+CONTEXTO TÉCNICO ADICIONAL (úsalo si es relevante):
+- Altura de la estructura: ${site?.alturaTotal || site?.altTotal || '—'}m | Tipo: ${site?.tipo || '—'}
+- Propietario: ${site?.propietario || '—'} | Tel: ${site?.tel || 'no registrado'}
+- Días de trabajo: ${sol.desde && sol.hasta ? Math.ceil((new Date(sol.hasta)-new Date(sol.desde))/86400000)+1 : '—'} día(s)
+
+CALIDAD DE RESPUESTAS:
+- Sé específico: usa nombres, fechas exactas y RUTs cuando los tengas
+- Ante dudas de seguridad: indica que los técnicos tienen documentación al día
+- Respuestas entre 2 y 5 oraciones — ni muy cortas ni muy largas
+- Lenguaje profesional pero cercano, sin tecnicismos innecesarios`
 }
 
 const PENDING_ESTADO = ['BORRADOR', 'ENVIADA', 'EN REVISIÓN']
@@ -1511,6 +1675,147 @@ const TabDocsSitios = () => {
 }
 
 /* ════════════════════════════════════════════════════════════
+   TAB ALERTAS OPERATIVAS
+   ════════════════════════════════════════════════════════════ */
+const PALABRAS_RECLAMO = ['reclamo', 'problema', 'inconveniente', 'molestia', 'queja', 'daño', 'rotura', 'basura', 'ruido', 'conflicto']
+
+const TabAlertas = ({ sols }) => {
+  const [sub, setSub] = useState('bloqueados')
+  const ahora = Date.now()
+  const hace30 = ahora - 30 * 86400000
+
+  // 6a: Técnicos bloqueados — Autorizados con fecha hoy, sin actualización en >30 min
+  const hoy = new Date().toISOString().split('T')[0]
+  const bloqueados = sols.filter(s =>
+    s.estado === 'Autorizado' &&
+    s.desde === hoy &&
+    s.tsAutorizado &&
+    (ahora - new Date(s.tsAutorizado).getTime()) > 30 * 60 * 1000
+  )
+
+  // 6b: Reclamos de propietarios
+  const reclamos = sols.filter(s =>
+    s.motivoRechazo &&
+    PALABRAS_RECLAMO.some(p => s.motivoRechazo.toLowerCase().includes(p))
+  )
+
+  // 6c: Anomalías
+  const sitiosConRechazos = {}
+  sols.filter(s => s.estado === 'Rechazado' && s.tsEnviado && new Date(s.tsEnviado).getTime() > hace30)
+    .forEach(s => { sitiosConRechazos[s.sitio] = (sitiosConRechazos[s.sitio] || 0) + 1 })
+  const sitiosCriticos = Object.entries(sitiosConRechazos).filter(([, n]) => n >= 3)
+
+  const operadoresStats = {}
+  sols.filter(s => s.tsEnviado && new Date(s.tsEnviado).getTime() > hace30).forEach(s => {
+    if (!operadoresStats[s.operador]) operadoresStats[s.operador] = { total: 0, exitosos: 0 }
+    operadoresStats[s.operador].total++
+    if (s.estado === 'Autorizado') operadoresStats[s.operador].exitosos++
+  })
+  const operadoresBajos = Object.entries(operadoresStats)
+    .filter(([, v]) => v.total >= 3 && (v.exitosos / v.total) < 0.5)
+
+  const total = bloqueados.length + reclamos.length + sitiosCriticos.length + operadoresBajos.length
+  const SUB = [
+    { id: 'bloqueados', label: `⏰ Técnicos en espera (${bloqueados.length})` },
+    { id: 'reclamos',   label: `💬 Reclamos (${reclamos.length})` },
+    { id: 'anomalias',  label: `📊 Anomalías (${sitiosCriticos.length + operadoresBajos.length})` },
+  ]
+
+  return (
+    <div className="fade-up" style={{ padding: 28 }}>
+      {total === 0 && (
+        <div style={{ background: '#F0FDF4', border: '1px solid #86EFAC', borderRadius: 10, padding: 24, textAlign: 'center', marginBottom: 20 }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
+          <div style={{ fontWeight: 700, color: '#15803D', fontSize: 16 }}>Sin alertas activas</div>
+          <div style={{ color: '#6B7280', fontSize: 13, marginTop: 4 }}>Todo en orden en los últimos 30 días</div>
+        </div>
+      )}
+
+      {/* Sub tabs */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+        {SUB.map(s => (
+          <button key={s.id} onClick={() => setSub(s.id)} style={{
+            padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer',
+            background: sub === s.id ? BK : '#F1F5F9', color: sub === s.id ? '#fff' : '#374151',
+          }}>{s.label}</button>
+        ))}
+      </div>
+
+      {/* 6a: Técnicos bloqueados */}
+      {sub === 'bloqueados' && (
+        <div>
+          {bloqueados.length === 0
+            ? <div style={{ padding: 32, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>No hay técnicos en espera hoy</div>
+            : bloqueados.map((s, i) => (
+              <Card key={i} style={{ padding: '16px 20px', marginBottom: 10, borderLeft: `4px solid ${RD}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: BK }}>{s.id} — {SITES.find(x => x.id === s.sitio)?.nombre || s.sitio}</div>
+                    <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>Empresa: {s.empresaNombre || s.empresa} · Fecha: {s.desde}</div>
+                    <div style={{ fontSize: 12, color: '#6B7280' }}>Técnicos: {(s.trabajadores || []).map(t => t.nombre).join(', ') || '—'}</div>
+                  </div>
+                  <span style={{ background: '#FEE2E2', color: RD, fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 4 }}>
+                    🚨 En espera {Math.floor((ahora - new Date(s.tsAutorizado).getTime()) / 60000)} min
+                  </span>
+                </div>
+              </Card>
+            ))
+          }
+        </div>
+      )}
+
+      {/* 6b: Reclamos */}
+      {sub === 'reclamos' && (
+        <div>
+          {reclamos.length === 0
+            ? <div style={{ padding: 32, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Sin reclamos registrados</div>
+            : reclamos.map((s, i) => (
+              <Card key={i} style={{ padding: '16px 20px', marginBottom: 10, borderLeft: `4px solid #F59E0B` }}>
+                <div className="mono" style={{ fontSize: 11, color: G, fontWeight: 600, marginBottom: 4 }}>{s.id}</div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: BK, marginBottom: 6 }}>{SITES.find(x => x.id === s.sitio)?.nombre || s.sitio}</div>
+                <div style={{ fontSize: 13, background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 6, padding: '8px 12px', color: '#92400E' }}>
+                  💬 {s.motivoRechazo}
+                </div>
+                <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 6 }}>Operadora: {s.operador} · {s.desde}</div>
+              </Card>
+            ))
+          }
+        </div>
+      )}
+
+      {/* 6c: Anomalías */}
+      {sub === 'anomalias' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {sitiosCriticos.length === 0 && operadoresBajos.length === 0 && (
+            <div style={{ padding: 32, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Sin anomalías detectadas en los últimos 30 días</div>
+          )}
+          {sitiosCriticos.map(([sitioId, n], i) => {
+            const site = SITES.find(x => x.id === sitioId)
+            return (
+              <Card key={i} style={{ padding: '16px 20px', borderLeft: `4px solid ${RD}` }}>
+                <div style={{ fontWeight: 700, color: BK }}>{site?.nombre || sitioId}</div>
+                <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>{site?.region} · {site?.tipo}</div>
+                <div style={{ marginTop: 8, background: '#FEF2F2', borderRadius: 6, padding: '8px 12px', fontSize: 13, color: '#B91C1C', fontWeight: 600 }}>
+                  ⚠ {n} rechazos en los últimos 30 días — sitio problemático
+                </div>
+              </Card>
+            )
+          })}
+          {operadoresBajos.map(([op, v], i) => (
+            <Card key={'op-' + i} style={{ padding: '16px 20px', borderLeft: `4px solid #F59E0B` }}>
+              <div style={{ fontWeight: 700, color: BK }}>{op}</div>
+              <div style={{ marginTop: 8, background: '#FFFBEB', borderRadius: 6, padding: '8px 12px', fontSize: 13, color: '#92400E', fontWeight: 600 }}>
+                📉 Tasa de éxito: {Math.round((v.exitosos / v.total) * 100)}% ({v.exitosos}/{v.total} solicitudes) — por debajo del 50%
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ════════════════════════════════════════════════════════════
    TAB CONFIGURACIÓN
    ════════════════════════════════════════════════════════════ */
 const TabConfig = () => {
@@ -1604,6 +1909,7 @@ const SECTIONS = {
   docs_sitios: { title: 'Documentos para Sitios', sub: 'Agregar tipos de documentos requeridos por sitio' },
   historial:   { title: 'Historial y Reportes',  sub: 'Trazabilidad de visitas y accesos' },
   config:      { title: 'Configuración',         sub: 'API Key, variables de entorno y sistema' },
+  alertas:     { title: '🚨 Alertas Operativas',   sub: 'Técnicos bloqueados · Reclamos · Anomalías detectadas' },
 }
 
 export default function ViewATP({ onLogout }) {
@@ -1633,6 +1939,11 @@ export default function ViewATP({ onLogout }) {
     [sols]
   )
 
+  const pendPend = useMemo(() =>
+    sols.filter(s => s.estado === 'Pendiente').length,
+    [sols]
+  )
+
   const { title, sub } = SECTIONS[tab]
 
   const renderTab = () => {
@@ -1646,13 +1957,14 @@ export default function ViewATP({ onLogout }) {
       case 'docs_sitios': return <TabDocsSitios />
       case 'historial':   return <TabHistorial   sols={sols} />
       case 'config':      return <TabConfig />
+      case 'alertas':     return <TabAlertas sols={sols} />
       default:            return <TabDashboard   sols={sols} />
     }
   }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#F8FAFC' }}>
-      <AtpSidebar active={tab} setActive={setTab} pendWa={pendWa} />
+      <AtpSidebar active={tab} setActive={setTab} pendWa={pendWa} pendPend={pendPend} />
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
         <AtpHeader title={title} sub={sub} onLogout={onLogout} />
         <main style={{ flex: 1, overflowY: 'auto' }}>{renderTab()}</main>
