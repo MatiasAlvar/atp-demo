@@ -237,7 +237,7 @@ export default function ViewOperador({ user, onLogout }) {
 /* ─── CHATBOT RULE-BASED (sin API key) ─────────────────── */
 function ChatbotAsistente({ sol, sitio, onClose, C }) {
   const [msgs, setMsgs] = useState([
-    { from: 'bot', text: `Hola, soy el asistente de ATP Chile. Puedo responder preguntas sobre la solicitud **${sol?.id || ''}**. ¿En qué le puedo ayudar?` }
+    { from: 'bot', text: `Hola, soy el asistente de ATP Chile. Puedo responder preguntas sobre la solicitud ${sol?.id || ''}. ¿En qué le puedo ayudar?` }
   ])
   const [input, setInput] = useState('')
   const endRef = useRef(null)
