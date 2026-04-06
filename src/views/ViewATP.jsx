@@ -389,7 +389,7 @@ const TabSolicitudes = ({ sols, setSols }) => {
                     </span>
                   )}
                 </div>
-                <Timeline estado={s.estado} />
+
               </Card>
             )
           })}
@@ -410,13 +410,12 @@ const TabSolicitudes = ({ sols, setSols }) => {
               </div>
             </div>
             <div style={{ padding: '18px 22px', maxHeight: '70vh', overflowY: 'auto' }}>
-              <Timeline estado={sel.estado} />
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 14 }}>
                 {[
                   { lbl: 'Sitio ID', val: sel.sitio, mono: true },
                   { lbl: 'Empresa', val: sel.empresa },
-                  { lbl: 'Fecha ingreso', val: `${sel.fechaIngreso} ${sel.horaIngreso}` },
-                  { lbl: 'Fecha salida', val: `${sel.fechaSalida || '—'} ${sel.horaSalida || ''}` },
+                  { lbl: 'Fecha ingreso', val: `${sel.desde || sel.fechaIngreso || '—'} ${sel.horaInicio || sel.horaIngreso || ''}`.trim() },
+                  { lbl: 'Fecha salida', val: `${sel.hasta || sel.fechaSalida || '—'} ${sel.horaFin || sel.horaSalida || ''}`.trim() },
                   { lbl: 'Tipo de faena', val: sel.trabajo, full: true },
                 ].map((x, i) => (
                   <div key={i} style={{ gridColumn: x.full ? '1/-1' : 'auto' }}>
