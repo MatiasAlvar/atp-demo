@@ -1841,15 +1841,16 @@ const TabDocsSitios = () => {
 
   // Cargar docs custom desde Supabase fila __GLOBAL__
   useEffect(() => {
-    supabase.from('sitios_config').select('docs_requeridos').eq('sitio_id', GLOBAL_SITIO_ID).single()
+    supabase.from('sitios_config').select('docs_requeridos,docs_eliminados').eq('sitio_id', GLOBAL_SITIO_ID).single()
       .then(({ data }) => {
         if (data?.docs_requeridos) setDocs(data.docs_requeridos)
+        if (data?.docs_eliminados) setDocsEliminados(data.docs_eliminados)
         setLoading(false)
       })
       .catch(() => setLoading(false))
   }, [])
 
-  const allDocs = [...(TIPOS_DOCS_SITIO || []), ...docs]
+  const allDocs = [...(TIPOS_DOCS_SITIO || []).filter(d => !docsEliminados.includes(d)), ...docs]
 
   const guardarEnSupabase = async (next) => {
     await supabase.from('sitios_config').upsert(
@@ -1869,11 +1870,24 @@ const TabDocsSitios = () => {
     setTimeout(() => setSaved(false), 2000)
   }
 
+  const [docsEliminados, setDocsEliminados] = useState([])
+
   const eliminar = async (doc) => {
-    if (TIPOS_DOCS_SITIO?.includes(doc)) return
-    const next = docs.filter(d => d !== doc)
-    setDocs(next)
-    await guardarEnSupabase(next)
+    if (!window.confirm('¿Eliminar el documento "' + doc + '"?')) return
+    const esBase = TIPOS_DOCS_SITIO?.includes(doc)
+    if (esBase) {
+      // Para base: guardar lista de eliminados en Supabase
+      const nextElim = [...docsEliminados, doc]
+      setDocsEliminados(nextElim)
+      await supabase.from('sitios_config').upsert(
+        { sitio_id: GLOBAL_SITIO_ID, docs_requeridos: docs, docs_eliminados: nextElim },
+        { onConflict: 'sitio_id' }
+      )
+    } else {
+      const next = docs.filter(d => d !== doc)
+      setDocs(next)
+      await guardarEnSupabase(next)
+    }
   }
 
   return (
@@ -1883,7 +1897,7 @@ const TabDocsSitios = () => {
         <div style={{ padding: 24 }}>
           <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 20, lineHeight: 1.6 }}>
             Gestiona los tipos de documentos disponibles para asignar a cada sitio en <strong>Sitios / Contactos</strong>.<br/>
-            Los documentos base (precargados) no se pueden eliminar. Puedes agregar los que necesites.
+            Gestiona los documentos disponibles. Puedes agregar nuevos o eliminar los que no necesites.
           </div>
 
           {/* Agregar nuevo */}
@@ -1912,12 +1926,10 @@ const TabDocsSitios = () => {
                     </span>
                     <span style={{ fontSize: 13, color: '#1A1A1A' }}>{doc}</span>
                   </div>
-                  {!esBase && (
-                    <button onClick={() => eliminar(doc)}
-                      style={{ background: '#FEE2E2', border: 'none', borderRadius: 5, padding: '4px 8px', cursor: 'pointer', color: '#B91C1C', fontSize: 12, fontWeight: 600 }}>
-                      Eliminar
-                    </button>
-                  )}
+                  <button onClick={() => eliminar(doc)}
+                    style={{ background: '#FEE2E2', border: 'none', borderRadius: 5, padding: '4px 8px', cursor: 'pointer', color: '#B91C1C', fontSize: 12, fontWeight: 600 }}>
+                    Eliminar
+                  </button>
                 </div>
               )
             })}
