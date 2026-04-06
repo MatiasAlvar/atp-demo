@@ -291,7 +291,7 @@ function ChatbotAsistente({ sol, sitio, onClose, C }) {
         color: msg.from === 'user' ? '#fff' : C.text,
         fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap',
       }}>
-        {msg.text.replace(/\*\*(.*?)\*\*/g, '$1')}
+        {msg.text.split('**').filter((_,i)=>i%2===0).join('')||msg.text}
       </div>
     </div>
   )
