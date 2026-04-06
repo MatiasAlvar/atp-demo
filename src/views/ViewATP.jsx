@@ -4,7 +4,7 @@
    ═══════════════════════════════════════════════════════════ */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { supabase, getSolicitudes, fromDb, updateEstado as supabaseUpdateEstado, getSitiosConfig, upsertSitioConfig } from '../lib/supabase'
-import { TODOS_SITIOS as SITES, COLOCALIZACIONES, TIPOS_DOCS_SITIO } from '../shared/data'
+import { TODOS_SITIOS as SITES, COLOCALIZACIONES, TIPOS_DOCS_SITIO, TIPOS_TRABAJO as TIPOS_TRABAJO_ATP } from '../shared/data'
 import {
   G, BK, RD, WA, SB,
   ATPLogo, Ic, Badge, Card, CardHeader, Btn, Timeline, STATE_COLORS,
@@ -243,9 +243,9 @@ const WeatherWidget = ({ sols }) => {
    TAB DASHBOARD
    ════════════════════════════════════════════════════════════ */
 const TabDashboard = ({ sols }) => {
-  const pend = sols.filter(s => ['BORRADOR', 'ENVIADA', 'EN REVISIÓN'].includes(s.estado)).length
-  const apr  = sols.filter(s => s.estado === 'APROBADA').length
-  const rec  = sols.filter(s => s.estado === 'RECHAZADA').length
+  const pend = sols.filter(s => ['En Gestión Propietario','Enviado','En Validación','Validado','Pendiente'].includes(s.estado)).length
+  const apr  = sols.filter(s => s.estado === 'Autorizado').length
+  const rec  = sols.filter(s => s.estado === 'Rechazado').length
   const act  = SITES.filter(s => s.estado === 'ocupado').length
   const alertas = []
 
@@ -1251,6 +1251,7 @@ const TabDocumentos = () => {
         </div>
         {(tab === 'empresa' ? DOCS_EMP : DOCS_TRAB).map((d, i) => <DocRow key={i} d={d} />)}
       </Card>
+      <TabEmpresasClientes />
     </div>
   )
 }
@@ -1294,7 +1295,22 @@ const TabHistorial = ({ sols }) => {
           <option value="">Todos los sitios</option>
           {SITES.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
         </select>
-        <Btn variant="ghost" icon={Ic.download} style={{ fontSize: 12 }}>Exportar CSV</Btn>
+        <button onClick={async () => {
+          if (!window.XLSX) {
+            await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s) })
+          }
+          const rows = filtered.map(s => ({
+            'ID': s.id, 'Sitio': SITES.find(x=>x.id===s.sitio)?.nombre||s.sitio,
+            'Trabajo': s.trabajo, 'Desde': s.desde||'—', 'Hasta': s.hasta||'—',
+            'Empresa': s.empresa||'—', 'Estado': s.estado,
+          }))
+          const ws = window.XLSX.utils.json_to_sheet(rows)
+          const wb = window.XLSX.utils.book_new()
+          window.XLSX.utils.book_append_sheet(wb, ws, 'Historial')
+          window.XLSX.writeFile(wb, 'historial_atp.xlsx')
+        }} style={{ padding:'6px 14px', background:'#22C55E', color:'#fff', border:'none', borderRadius:6, cursor:'pointer', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', gap:5 }}>
+          📥 Exportar Excel
+        </button>
       </div>
       <Card style={{ overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -1392,6 +1408,8 @@ const TabSitios = () => {
       restriccion_hasta:   c.restriccion_horaria?.hora_hasta || '',
       restriccion_dias:    c.restriccion_horaria?.dias       || ['Lunes','Martes','Miércoles','Jueves','Viernes'],
       restriccion_habiles: c.restriccion_horaria?.solo_habiles ?? false,
+      liberacion_activa:   c.liberacion_auto?.activa  ?? false,
+      liberacion_trabajos: c.liberacion_auto?.trabajos || [],
     })
   }
 
@@ -1416,6 +1434,10 @@ const TabSitios = () => {
       bloqueado:      form.bloqueado,
       motivo_bloqueo: form.motivo_bloqueo || '',
       docs_requeridos: form.docs_requeridos || [],
+      liberacion_auto: {
+        activa:   form.liberacion_activa,
+        trabajos: form.liberacion_trabajos,
+      },
       restriccion_horaria: {
         activa:       form.restriccion_activa,
         hora_desde:   form.restriccion_desde,
@@ -1642,6 +1664,37 @@ const TabSitios = () => {
               )}
             </div>
 
+            {/* Liberación automática */}
+            <div style={{ padding: '14px 16px', background: form.liberacion_activa ? '#F0FDF4' : '#F9FAFB', borderRadius: 8, border: `1px solid ${form.liberacion_activa ? '#86EFAC' : '#E5E7EB'}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: form.liberacion_activa ? 12 : 0 }}>
+                <button onClick={() => setForm(f => ({ ...f, liberacion_activa: !f.liberacion_activa }))}
+                  style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', background: form.liberacion_activa ? '#22C55E' : '#D1D5DB', position: 'relative', transition: 'background .2s', flexShrink: 0 }}>
+                  <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: form.liberacion_activa ? 23 : 3, transition: 'left .2s' }} />
+                </button>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: form.liberacion_activa ? '#15803D' : BK }}>
+                    {form.liberacion_activa ? '🔓 Liberación automática activa' : 'Sin liberación automática'}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#6B7280' }}>El acceso se libera automáticamente al finalizar el trabajo seleccionado</div>
+                </div>
+              </div>
+              {form.liberacion_activa && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', marginBottom: 8 }}>Trabajos con liberación automática:</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    {(TIPOS_TRABAJO_ATP || []).map(t => (
+                      <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12 }}>
+                        <input type="checkbox" checked={(form.liberacion_trabajos||[]).includes(t)}
+                          onChange={e => setForm(f => ({ ...f, liberacion_trabajos: e.target.checked ? [...(f.liberacion_trabajos||[]),t] : (f.liberacion_trabajos||[]).filter(x=>x!==t) }))}
+                          style={{ accentColor: '#22C55E' }} />
+                        {t}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <Btn variant="primary" onClick={save} style={{ alignSelf: 'flex-start', minWidth: 160 }}>
               {saving ? 'Guardando…' : saved ? '✓ Guardado' : 'Guardar cambios'}
             </Btn>
@@ -1658,6 +1711,114 @@ const TabSitios = () => {
   )
 }
 
+
+
+/* ════════════════════════════════════════════════════════════
+   TAB EMPRESAS CONTRATISTAS — gestión por cliente en TabDocumentos
+   ════════════════════════════════════════════════════════════ */
+const TabEmpresasClientes = () => {
+  const [clientes, setClientes]       = useState([])
+  const [loading, setLoading]         = useState(true)
+  const [modalCliente, setModalCliente] = useState(false)
+  const [nuevoNombre, setNuevoNombre] = useState('')
+  const [nuevoId, setNuevoId]         = useState('')
+  const [uploadingFor, setUploadingFor] = useState(null)
+
+  useEffect(() => {
+    // Cargar lista de clientes únicos desde empresas_contratistas
+    supabase.from('empresas_contratistas').select('cliente_id').then(({ data }) => {
+      if (data) {
+        const ids = [...new Set(data.map(r => r.cliente_id))]
+        setClientes(ids.map(id => ({ id, nombre: id })))
+      }
+      setLoading(false)
+    })
+  }, [])
+
+  const agregarCliente = () => {
+    const id = nuevoId.trim().toLowerCase().replace(/\s+/g,'_')
+    if (!id || clientes.some(c => c.id === id)) return
+    setClientes(p => [...p, { id, nombre: nuevoNombre.trim() || id }])
+    setNuevoNombre(''); setNuevoId(''); setModalCliente(false)
+  }
+
+  const subirExcel = async (clienteId, file) => {
+    setUploadingFor(clienteId)
+    try {
+      if (!window.XLSX) {
+        await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s) })
+      }
+      const buf = await file.arrayBuffer()
+      const wb  = window.XLSX.read(buf)
+      const ws  = wb.Sheets[wb.SheetNames[0]]
+      const rows = window.XLSX.utils.sheet_to_json(ws, { defval: '' })
+      const parsed = rows.map(r => ({
+        cliente_id: clienteId,
+        nombre: (r['empresa contratista']||r['Empresa Contratista']||r['nombre']||r['Nombre']||Object.values(r)[0]||'').toString().trim(),
+        rut:    (r['rut']||r['RUT']||r['Rut']||Object.values(r)[1]||'').toString().trim(),
+      })).filter(r => r.nombre && r.rut)
+      if (!parsed.length) { alert('Sin datos válidos. Columnas: "empresa contratista" y "rut"'); setUploadingFor(null); return }
+      // Reemplazar todos los registros del cliente
+      await supabase.from('empresas_contratistas').delete().eq('cliente_id', clienteId)
+      await supabase.from('empresas_contratistas').insert(parsed)
+      alert(`✅ ${parsed.length} empresas actualizadas para ${clienteId}`)
+    } catch(e) { alert('Error: ' + e.message) }
+    setUploadingFor(false)
+  }
+
+  return (
+    <div style={{ marginTop: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 16, color: BK }}>🏢 Empresas Contratistas por Cliente</div>
+          <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>Cada cliente solo verá sus empresas habilitadas al crear solicitudes</div>
+        </div>
+        <button onClick={() => setModalCliente(true)}
+          style={{ background: G, color: '#fff', border: 'none', borderRadius: 6, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+          + Agregar cliente
+        </button>
+      </div>
+
+      {modalCliente && (
+        <div style={{ position: 'fixed', inset: 0, background: '#00000077', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
+          <div style={{ background: '#fff', borderRadius: 10, padding: 28, width: 380, boxShadow: '0 16px 48px #0003' }}>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Nuevo cliente</div>
+            <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 5 }}>Nombre visible</label>
+            <input value={nuevoNombre} onChange={e => setNuevoNombre(e.target.value)} placeholder="Ej: Telefónica Móviles Chile"
+              style={{ width: '100%', padding: '9px 11px', borderRadius: 6, border: '1px solid #E5E7EB', fontSize: 13, marginBottom: 12, fontFamily: 'IBM Plex Sans', outline: 'none', boxSizing: 'border-box' }} />
+            <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 5 }}>ID interno (sin espacios)</label>
+            <input value={nuevoId} onChange={e => setNuevoId(e.target.value)} placeholder="Ej: telefonica"
+              style={{ width: '100%', padding: '9px 11px', borderRadius: 6, border: '1px solid #E5E7EB', fontSize: 13, marginBottom: 18, fontFamily: 'IBM Plex Sans', outline: 'none', boxSizing: 'border-box' }} />
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={agregarCliente} style={{ flex: 1, background: G, color: '#fff', border: 'none', borderRadius: 6, padding: '10px 0', fontWeight: 700, cursor: 'pointer' }}>Agregar</button>
+              <button onClick={() => { setModalCliente(false); setNuevoNombre(''); setNuevoId('') }}
+                style={{ flex: 1, background: '#F1F5F9', border: 'none', borderRadius: 6, padding: '10px 0', cursor: 'pointer' }}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {loading ? <div style={{ color: '#9CA3AF', fontSize: 13 }}>Cargando...</div> : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {clientes.length === 0 && <div style={{ color: '#9CA3AF', fontSize: 13, padding: 16 }}>Sin clientes registrados. Agrega uno para empezar.</div>}
+          {clientes.map(cl => (
+            <div key={cl.id} style={{ background: '#F8FAFC', border: '1px solid #E5E7EB', borderRadius: 8, padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: BK }}>{cl.nombre}</div>
+                <div style={{ fontSize: 11, color: '#9CA3AF', fontFamily: 'monospace' }}>{cl.id}</div>
+              </div>
+              <label style={{ background: uploadingFor === cl.id ? '#F1F5F9' : G, color: uploadingFor === cl.id ? '#9CA3AF' : '#fff', borderRadius: 6, padding: '7px 14px', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                {uploadingFor === cl.id ? '⏳ Subiendo...' : '📂 Subir Excel'}
+                <input type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} disabled={!!uploadingFor}
+                  onChange={e => { if(e.target.files[0]) subirExcel(cl.id, e.target.files[0]); e.target.value='' }} />
+              </label>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 /* ════════════════════════════════════════════════════════════
    TAB DOCS PARA SITIOS — gestionar tipos de documentos

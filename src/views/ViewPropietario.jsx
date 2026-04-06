@@ -328,6 +328,14 @@ function SolCardPropietario({ s, onDecision, onRechazar, resuelta }) {
             {s.estado==='Autorizado' ? '✅ Autorizaste este acceso' : '🚫 Rechazaste este acceso'}
           </div>
           {s.motivoRechazo && <div style={{marginTop:6,fontSize:12,background:'#FFF3F3',border:'1px solid #FFCDD2',borderRadius:4,padding:'6px 10px',color:'#B71C1C'}}>💬 Motivo: {s.motivoRechazo}</div>}
+          {s.estado==='Rechazado' && (
+            <div style={{marginTop:8,background:'#F0F9FF',border:'1px solid #BAE6FD',borderRadius:6,padding:'10px 12px'}}>
+              <div style={{fontSize:11,fontWeight:700,color:'#0369A1',marginBottom:4}}>📞 ¿Necesitas hablar con ATP Chile?</div>
+              <div style={{fontSize:12,color:'#374151'}}>Nombre: <strong>ATP Chile — Gestión de Accesos</strong></div>
+              <div style={{fontSize:12,color:'#374151'}}>Teléfono: <strong>+56 2 2345 6789</strong></div>
+              <div style={{fontSize:12,color:'#374151'}}>Email: <strong>accesos@atpchile.cl</strong></div>
+            </div>
+          )}
         </div>
       )}
     </div>
