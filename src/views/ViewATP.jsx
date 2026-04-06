@@ -603,7 +603,7 @@ const SitesMapRelieve = ({ sites = SITES, height = 580, criticalIds = [] }) => {
 /* ════════════════════════════════════════════════════════════
    TAB MAPA — exacto de versión nueva
    ════════════════════════════════════════════════════════════ */
-const TabMapa = () => {
+const TabMapa = ({ sols = [] }) => {
   const [filter, setFilter]     = useState('todos')
   const [tileMode, setTileMode] = useState('claro')  // 'claro' | 'relieve'
   const [tablaQ, setTablaQ]     = useState('')
@@ -614,12 +614,22 @@ const TabMapa = () => {
   const [mapFocusSite, setMapFocusSite] = useState(null)
   const TABLA_PP = 20
 
+  const hoy = new Date().toISOString().split('T')[0]
+  const sitiosOcupados = useMemo(() => {
+    const ids = new Set()
+    sols.forEach(s => {
+      if (['Autorizado','En Gestión Propietario'].includes(s.estado) && s.desde && s.hasta) {
+        if (hoy >= s.desde && hoy <= s.hasta) ids.add(s.sitio)
+      }
+    })
+    return ids
+  }, [sols, hoy])
+
   const filtered = useMemo(() => {
-    if (filter === 'whatsapp') return SITES.filter(s => s.whatsapp)
-    if (filter === 'ocupado')  return SITES.filter(s => s.estado === 'ocupado')
-    if (filter === 'libre')    return SITES.filter(s => s.estado === 'libre')
+    if (filter === 'ocupado') return SITES.filter(s => sitiosOcupados.has(s.id))
+    if (filter === 'libre')   return SITES.filter(s => !sitiosOcupados.has(s.id))
     return SITES
-  }, [filter])
+  }, [filter, sitiosOcupados])
 
   const mapKey = filter
 
@@ -646,10 +656,9 @@ const TabMapa = () => {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', background: '#F3F4F6', borderRadius: 9, padding: 3, gap: 2 }}>
           {[
-            { id: 'todos',    label: 'Todos' },
-            { id: 'libre',    label: 'Libres' },
-            { id: 'ocupado',  label: 'Ocupados' },
-            { id: 'whatsapp', label: '📲 WhatsApp' },
+            { id: 'todos',   label: 'Todos' },
+            { id: 'libre',   label: 'Libres' },
+            { id: 'ocupado', label: 'Ocupados' },
           ].map(f => (
             <button key={f.id} onClick={() => setFilter(f.id)} style={{
               padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700,
@@ -660,7 +669,7 @@ const TabMapa = () => {
           ))}
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 16, alignItems: 'center' }}>
-          {[{ color: G, label: 'Libre' }, { color: '#F59E0B', label: 'Ocupado' }, { color: WA, label: 'WhatsApp' }].map((l, i) => (
+          {[{ color: G, label: 'Libre' }, { color: '#F59E0B', label: 'Ocupado' }].map((l, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#6B7280' }}>
               <div style={{ width: 10, height: 10, borderRadius: '50%', background: l.color }} />{l.label}
             </div>
@@ -2199,7 +2208,7 @@ export default function ViewATP({ onLogout }) {
     switch (tab) {
       case 'dashboard':   return <TabDashboard   sols={sols} />
       case 'solicitudes': return <TabSolicitudes sols={sols} setSols={setSols} />
-      case 'mapa':        return <TabMapa />
+      case 'mapa':        return <TabMapa sols={sols} />
       case 'sitios':      return <TabSitios />
       case 'whatsapp':    return <TabWhatsApp    sols={sols} setSols={setSols} />
       case 'documentos':  return <TabDocumentos />
