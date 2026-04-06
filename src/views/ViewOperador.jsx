@@ -685,16 +685,16 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
 
   const mySitios = TODOS_SITIOS.filter(s => { const cols = COLOCALIZACIONES[s.id]||[]; return cols.length===0 ? true : cols.includes(user.operador) })
 
-  const empresasDelOperador = useMemo(() => {
-    if (empresasOperador.length > 0) return empresasOperador
-    return empresas
-  }, [empresas, empresasOperador])
-
   const [empresasOperador, setEmpresasOperador] = useState([])
   useEffect(() => {
     supabase.from('empresas_contratistas').select('nombre,rut').eq('cliente_id', user.operador)
       .then(({ data }) => { if (data && data.length) setEmpresasOperador(data) })
   }, [user.operador])
+
+  const empresasDelOperador = useMemo(() => {
+    if (empresasOperador.length > 0) return empresasOperador
+    return empresas
+  }, [empresas, empresasOperador])
 
   const empresasFiltradas = useMemo(() => {
     if (!empresaBusq || empresaBusq.length < 2) return []
