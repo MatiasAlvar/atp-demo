@@ -248,15 +248,15 @@ function ChatbotAsistente({ sol, sitio, onClose, C }) {
     if (!sol) return 'No hay solicitud seleccionada.'
     const ql = q.toLowerCase()
     if (/estado|cómo va|resultado|aprobad|rechazad|autorizado/.test(ql))
-      return `El estado actual de la solicitud ${sol.id} es **${sol.estado}**.${sol.motivoRechazo ? ` Motivo: ${sol.motivoRechazo}` : ''}`
+      return `El estado actual de la solicitud ${sol.id} es ${sol.estado}.${sol.motivoRechazo ? ` Motivo: ${sol.motivoRechazo}` : ''}`
     if (/fecha|cuándo|día|plazo/.test(ql))
-      return `La solicitud contempla acceso desde el **${sol.desde || '—'}** hasta el **${sol.hasta || '—'}**.`
+      return `La solicitud contempla acceso desde el ${sol.desde || '—'} hasta el ${sol.hasta || '—'}.`
     if (/sitio|lugar|dónde|ubicación/.test(ql))
-      return `El sitio es **${sol.sitio}**${sitio?.region ? ` (${sitio.region}, ${sitio.comuna})` : ''}. Tipo: ${sitio?.tipo || '—'}.`
+      return `El sitio es ${sol.sitio}${sitio?.region ? ` (${sitio.region}, ${sitio.comuna})` : ''}. Tipo: ${sitio?.tipo || '—'}.`
     if (/trabajo|faena|qué van|qué se/.test(ql))
-      return `El tipo de trabajo es: **${sol.trabajo || '—'}**.`
+      return `El tipo de trabajo es: ${sol.trabajo || '—'}.`
     if (/empresa|contratista|quién hace/.test(ql))
-      return `La empresa contratista es **${sol.empresaNombre || sol.empresa || '—'}**.`
+      return `La empresa contratista es ${sol.empresaNombre || sol.empresa || '—'}.`
     if (/técnico|personal|trabajador|quién va|rut/.test(ql)) {
       const trab = (sol.trabajadores || []).filter(t => t.nombre)
       if (!trab.length) return 'No hay personal registrado en esta solicitud.'
