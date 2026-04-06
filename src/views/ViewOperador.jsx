@@ -1204,6 +1204,11 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, s
                 ))}
               </div>
             )}
+            {showEmpresaDrop && empresaBusq.length < 2 && empresasDelOperador.length === 0 && (
+              <div style={{padding:'10px 14px',fontSize:12,color:'#9CA3AF',background:C.white,border:`1px solid ${C.border}`,borderRadius:4,marginTop:2}}>
+                No hay empresas habilitadas para tu perfil. Contacta a ATP Chile.
+              </div>
+            )}
             {showEmpresaDrop && empresaBusq.length >= 2 && empresasFiltradas.length === 0 && (
               <div style={{position:'absolute',top:'100%',left:0,right:0,background:C.white,border:`1px solid ${C.border}`,borderRadius:4,padding:'10px 14px',zIndex:200,boxShadow:'0 4px 12px #0002'}}>
                 <div style={{fontSize:12,color:C.textS,marginBottom:6}}>No encontrada.</div>

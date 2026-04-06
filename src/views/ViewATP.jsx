@@ -1181,80 +1181,11 @@ const TabWhatsApp = ({ sols, setSols }) => {
 /* ════════════════════════════════════════════════════════════
    TAB DOCUMENTOS
    ════════════════════════════════════════════════════════════ */
-const TabDocumentos = () => {
-  const [tab, setTab] = useState('empresa')
-  const DOCS_EMP  = []
-  const DOCS_TRAB = []
-  const allDocs = [...DOCS_EMP, ...DOCS_TRAB]
-  const venc  = allDocs.filter(d => d.estado === 'vencido').length
-  const xVenc = allDocs.filter(d => d.estado === 'por vencer').length
-  const vigs  = allDocs.filter(d => d.estado === 'vigente').length
-
-  const DocRow = ({ d }) => (
-    <div style={{ display: 'flex', alignItems: 'center', padding: '13px 18px', borderBottom: '1px solid #F0F0F0', gap: 12 }}>
-      <div style={{ width: 9, height: 9, borderRadius: '50%', flexShrink: 0, background: d.estado === 'vigente' ? '#22C55E' : d.estado === 'por vencer' ? '#F59E0B' : RD }} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: BK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.nombre}</div>
-        {d.trabajador && <div style={{ fontSize: 12, color: '#6B7280', marginTop: 1 }}>{d.trabajador} · <span className="mono">{d.rut}</span></div>}
-      </div>
-      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <div className="mono" style={{ fontSize: 11, color: d.estado === 'vencido' ? RD : '#6B7280' }}>Vence: {d.vence}</div>
-        <div style={{ marginTop: 4 }}><Badge label={d.estado} /></div>
-      </div>
-      <button style={{ padding: '6px 10px', background: '#F1F5F9', border: 'none', borderRadius: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#64748B', fontWeight: 600 }}>
-        <Ic.eye w={14} h={14} /> Ver
-      </button>
-    </div>
-  )
-
-  return (
-    <div className="fade-up" style={{ padding: 28 }}>
-      {venc > 0 && (
-        <div style={{ padding: '13px 18px', borderRadius: 10, background: '#FEF2F2', border: '1px solid #FECACA', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Ic.warn w={20} h={20} style={{ color: RD, flexShrink: 0 }} />
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: '#991B1B' }}>{venc} documento{venc > 1 ? 's' : ''} vencido{venc > 1 ? 's' : ''}</div>
-            <div style={{ fontSize: 12, color: '#B91C1C', marginTop: 1 }}>Estos documentos impiden el acceso a sitios. Actualiza los documentos afectados para continuar operando.</div>
-          </div>
-        </div>
-      )}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
-        {[
-          { lbl: 'Vigentes', n: vigs, color: '#22C55E', Ico: Ic.check },
-          { lbl: 'Por vencer', n: xVenc, color: '#F59E0B', Ico: Ic.clock },
-          { lbl: 'Vencidos', n: venc, color: RD, Ico: Ic.warn },
-        ].map(({ lbl, n, color, Ico }, i) => (
-          <Card key={i} style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 9, background: color + '18', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Ico w={19} h={19} style={{ color }} />
-            </div>
-            <div>
-              <div className="mono" style={{ fontSize: 28, fontWeight: 700, color: BK, lineHeight: 1 }}>{n}</div>
-              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 3 }}>{lbl}</div>
-            </div>
-          </Card>
-        ))}
-      </div>
-      <Card style={{ overflow: 'hidden' }}>
-        <div style={{ display: 'flex', borderBottom: '1px solid #E5E7EB', alignItems: 'center' }}>
-          {[{ id: 'empresa', lbl: 'Empresa' }, { id: 'trabajadores', lbl: 'Trabajadores' }].map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{
-              padding: '13px 22px', fontWeight: 700, fontSize: 13, fontFamily: 'IBM Plex Sans',
-              background: tab === t.id ? '#FAFAFA' : 'transparent',
-              borderBottom: `2px solid ${tab === t.id ? G : 'transparent'}`,
-              color: tab === t.id ? BK : '#6B7280', border: 'none', cursor: 'pointer', transition: 'all .15s',
-            }}>{t.lbl}</button>
-          ))}
-          <div style={{ marginLeft: 'auto', padding: '0 14px' }}>
-            <Btn variant="primary" icon={Ic.upload} style={{ fontSize: 12, padding: '7px 14px' }}>Cargar documento</Btn>
-          </div>
-        </div>
-        {(tab === 'empresa' ? DOCS_EMP : DOCS_TRAB).map((d, i) => <DocRow key={i} d={d} />)}
-      </Card>
-      <TabEmpresasClientes />
-    </div>
-  )
-}
+const TabDocumentos = () => (
+  <div className="fade-up" style={{ padding: 28 }}>
+    <TabEmpresasClientes />
+  </div>
+)
 
 /* ════════════════════════════════════════════════════════════
    TAB HISTORIAL
@@ -1717,64 +1648,77 @@ const TabSitios = () => {
    TAB EMPRESAS CONTRATISTAS — gestión por cliente en TabDocumentos
    ════════════════════════════════════════════════════════════ */
 const TabEmpresasClientes = () => {
-  const [clientes, setClientes]       = useState([])
+  const [data, setData]               = useState({}) // { cliente_id: [{nombre, rut}] }
   const [loading, setLoading]         = useState(true)
   const [modalCliente, setModalCliente] = useState(false)
-  const [nuevoNombre, setNuevoNombre] = useState('')
   const [nuevoId, setNuevoId]         = useState('')
   const [uploadingFor, setUploadingFor] = useState(null)
+  const [expandido, setExpandido]     = useState({})
 
-  useEffect(() => {
-    // Cargar lista de clientes únicos desde empresas_contratistas
-    supabase.from('empresas_contratistas').select('cliente_id').then(({ data }) => {
-      if (data) {
-        const ids = [...new Set(data.map(r => r.cliente_id))]
-        setClientes(ids.map(id => ({ id, nombre: id })))
+  const cargar = () => {
+    supabase.from('empresas_contratistas').select('cliente_id,nombre,rut').order('cliente_id').then(({ data: rows }) => {
+      if (rows) {
+        const grouped = {}
+        rows.forEach(r => {
+          if (!grouped[r.cliente_id]) grouped[r.cliente_id] = []
+          grouped[r.cliente_id].push({ nombre: r.nombre, rut: r.rut })
+        })
+        setData(grouped)
       }
       setLoading(false)
     })
-  }, [])
+  }
+
+  useEffect(() => { cargar() }, [])
 
   const agregarCliente = () => {
-    const id = nuevoId.trim().toLowerCase().replace(/\s+/g,'_')
-    if (!id || clientes.some(c => c.id === id)) return
-    setClientes(p => [...p, { id, nombre: nuevoNombre.trim() || id }])
-    setNuevoNombre(''); setNuevoId(''); setModalCliente(false)
+    const id = nuevoId.trim().toLowerCase().replace(/\s+/g, '_')
+    if (!id || data[id] !== undefined) return
+    setData(p => ({ ...p, [id]: [] }))
+    setNuevoId('')
+    setModalCliente(false)
   }
 
   const subirExcel = async (clienteId, file) => {
     setUploadingFor(clienteId)
     try {
       if (!window.XLSX) {
-        await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s) })
+        await new Promise((res, rej) => {
+          const s = document.createElement('script')
+          s.src = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js'
+          s.onload = res; s.onerror = rej
+          document.head.appendChild(s)
+        })
       }
-      const buf = await file.arrayBuffer()
-      const wb  = window.XLSX.read(buf)
-      const ws  = wb.Sheets[wb.SheetNames[0]]
+      const buf  = await file.arrayBuffer()
+      const wb   = window.XLSX.read(buf)
+      const ws   = wb.Sheets[wb.SheetNames[0]]
       const rows = window.XLSX.utils.sheet_to_json(ws, { defval: '' })
       const parsed = rows.map(r => ({
         cliente_id: clienteId,
-        nombre: (r['empresa contratista']||r['Empresa Contratista']||r['nombre']||r['Nombre']||Object.values(r)[0]||'').toString().trim(),
-        rut:    (r['rut']||r['RUT']||r['Rut']||Object.values(r)[1]||'').toString().trim(),
+        nombre: (r['empresa contratista'] || r['Empresa Contratista'] || r['nombre'] || r['Nombre'] || Object.values(r)[0] || '').toString().trim(),
+        rut:    (r['rut'] || r['RUT'] || r['Rut'] || Object.values(r)[1] || '').toString().trim(),
       })).filter(r => r.nombre && r.rut)
-      if (!parsed.length) { alert('Sin datos válidos. Columnas: "empresa contratista" y "rut"'); setUploadingFor(null); return }
-      // Reemplazar todos los registros del cliente
+      if (!parsed.length) { alert('Sin datos válidos. Columnas requeridas: "empresa contratista" y "rut"'); setUploadingFor(null); return }
       await supabase.from('empresas_contratistas').delete().eq('cliente_id', clienteId)
       await supabase.from('empresas_contratistas').insert(parsed)
-      alert(`✅ ${parsed.length} empresas actualizadas para ${clienteId}`)
-    } catch(e) { alert('Error: ' + e.message) }
-    setUploadingFor(false)
+      setData(p => ({ ...p, [clienteId]: parsed.map(r => ({ nombre: r.nombre, rut: r.rut })) }))
+      setExpandido(p => ({ ...p, [clienteId]: true }))
+    } catch(e) { alert('Error al leer el archivo: ' + e.message) }
+    setUploadingFor(null)
   }
 
+  const clientes = Object.keys(data)
+
   return (
-    <div style={{ marginTop: 28 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
-          <div style={{ fontWeight: 700, fontSize: 16, color: BK }}>🏢 Empresas Contratistas por Cliente</div>
-          <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>Cada cliente solo verá sus empresas habilitadas al crear solicitudes</div>
+          <div style={{ fontWeight: 700, fontSize: 18, color: BK }}>🏢 Empresas Contratistas por Cliente</div>
+          <div style={{ fontSize: 13, color: '#6B7280', marginTop: 3 }}>Cada cliente solo verá sus empresas habilitadas al crear solicitudes</div>
         </div>
         <button onClick={() => setModalCliente(true)}
-          style={{ background: G, color: '#fff', border: 'none', borderRadius: 6, padding: '8px 16px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+          style={{ background: G, color: '#fff', border: 'none', borderRadius: 7, padding: '9px 18px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
           + Agregar cliente
         </button>
       </div>
@@ -1783,37 +1727,79 @@ const TabEmpresasClientes = () => {
         <div style={{ position: 'fixed', inset: 0, background: '#00000077', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
           <div style={{ background: '#fff', borderRadius: 10, padding: 28, width: 380, boxShadow: '0 16px 48px #0003' }}>
             <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Nuevo cliente</div>
-            <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 5 }}>Nombre visible</label>
-            <input value={nuevoNombre} onChange={e => setNuevoNombre(e.target.value)} placeholder="Ej: Telefónica Móviles Chile"
-              style={{ width: '100%', padding: '9px 11px', borderRadius: 6, border: '1px solid #E5E7EB', fontSize: 13, marginBottom: 12, fontFamily: 'IBM Plex Sans', outline: 'none', boxSizing: 'border-box' }} />
-            <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 5 }}>ID interno (sin espacios)</label>
-            <input value={nuevoId} onChange={e => setNuevoId(e.target.value)} placeholder="Ej: telefonica"
+            <label style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 5 }}>ID del cliente (sin espacios, ej: movistar)</label>
+            <input value={nuevoId} onChange={e => setNuevoId(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && agregarCliente()}
+              placeholder="Ej: movistar, entel, claro"
               style={{ width: '100%', padding: '9px 11px', borderRadius: 6, border: '1px solid #E5E7EB', fontSize: 13, marginBottom: 18, fontFamily: 'IBM Plex Sans', outline: 'none', boxSizing: 'border-box' }} />
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={agregarCliente} style={{ flex: 1, background: G, color: '#fff', border: 'none', borderRadius: 6, padding: '10px 0', fontWeight: 700, cursor: 'pointer' }}>Agregar</button>
-              <button onClick={() => { setModalCliente(false); setNuevoNombre(''); setNuevoId('') }}
-                style={{ flex: 1, background: '#F1F5F9', border: 'none', borderRadius: 6, padding: '10px 0', cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={agregarCliente} style={{ flex: 1, background: G, color: '#fff', border: 'none', borderRadius: 6, padding: '10px 0', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>Agregar</button>
+              <button onClick={() => { setModalCliente(false); setNuevoId('') }}
+                style={{ flex: 1, background: '#F1F5F9', border: 'none', borderRadius: 6, padding: '10px 0', cursor: 'pointer', fontSize: 14 }}>Cancelar</button>
             </div>
           </div>
         </div>
       )}
 
-      {loading ? <div style={{ color: '#9CA3AF', fontSize: 13 }}>Cargando...</div> : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {clientes.length === 0 && <div style={{ color: '#9CA3AF', fontSize: 13, padding: 16 }}>Sin clientes registrados. Agrega uno para empezar.</div>}
-          {clientes.map(cl => (
-            <div key={cl.id} style={{ background: '#F8FAFC', border: '1px solid #E5E7EB', borderRadius: 8, padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 14, color: BK }}>{cl.nombre}</div>
-                <div style={{ fontSize: 11, color: '#9CA3AF', fontFamily: 'monospace' }}>{cl.id}</div>
+      {loading ? (
+        <div style={{ color: '#9CA3AF', fontSize: 13, padding: 24, textAlign: 'center' }}>Cargando...</div>
+      ) : clientes.length === 0 ? (
+        <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: 32, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>
+          Sin clientes registrados. Presiona "+ Agregar cliente" para comenzar.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {clientes.map(clienteId => {
+            const empresas = data[clienteId] || []
+            const abierto  = expandido[clienteId]
+            return (
+              <div key={clienteId} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 10, overflow: 'hidden' }}>
+                {/* Header del cliente */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', background: '#F8FAFC' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <button onClick={() => setExpandido(p => ({ ...p, [clienteId]: !p[clienteId] }))}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, color: '#6B7280', padding: 0 }}>
+                      {abierto ? '▼' : '▶'}
+                    </button>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: BK }}>{clienteId}</div>
+                      <div style={{ fontSize: 12, color: '#9CA3AF' }}>{empresas.length} empresa{empresas.length !== 1 ? 's' : ''} habilitada{empresas.length !== 1 ? 's' : ''}</div>
+                    </div>
+                  </div>
+                  <label style={{ background: uploadingFor === clienteId ? '#F1F5F9' : G, color: uploadingFor === clienteId ? '#9CA3AF' : '#fff', borderRadius: 6, padding: '7px 16px', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    {uploadingFor === clienteId ? '⏳ Subiendo...' : '📂 Subir Excel'}
+                    <input type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} disabled={uploadingFor === clienteId}
+                      onChange={e => { if(e.target.files[0]) subirExcel(clienteId, e.target.files[0]); e.target.value = '' }} />
+                  </label>
+                </div>
+                {/* Lista de empresas expandida */}
+                {abierto && (
+                  <div>
+                    {empresas.length === 0 ? (
+                      <div style={{ padding: '16px 20px', color: '#9CA3AF', fontSize: 13 }}>Sin empresas. Sube un Excel con columnas "empresa contratista" y "rut".</div>
+                    ) : (
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                          <tr style={{ background: '#F1F5F9' }}>
+                            <th style={{ padding: '8px 20px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: .5 }}>Empresa contratista</th>
+                            <th style={{ padding: '8px 20px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: .5 }}>RUT</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {empresas.map((e, i) => (
+                            <tr key={i} style={{ borderTop: '1px solid #F0F0F0' }}>
+                              <td style={{ padding: '10px 20px', fontSize: 13, color: BK, fontWeight: 500 }}>{e.nombre}</td>
+                              <td style={{ padding: '10px 20px', fontSize: 12, color: '#6B7280', fontFamily: 'monospace' }}>{e.rut}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )}
               </div>
-              <label style={{ background: uploadingFor === cl.id ? '#F1F5F9' : G, color: uploadingFor === cl.id ? '#9CA3AF' : '#fff', borderRadius: 6, padding: '7px 14px', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                {uploadingFor === cl.id ? '⏳ Subiendo...' : '📂 Subir Excel'}
-                <input type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} disabled={!!uploadingFor}
-                  onChange={e => { if(e.target.files[0]) subirExcel(cl.id, e.target.files[0]); e.target.value='' }} />
-              </label>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
