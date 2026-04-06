@@ -1708,6 +1708,12 @@ const TabEmpresasClientes = () => {
     setUploadingFor(null)
   }
 
+  const eliminarCliente = async (clienteId) => {
+    if (!window.confirm('¿Eliminar cliente "' + clienteId + '" y todas sus empresas habilitadas?')) return
+    await supabase.from('empresas_contratistas').delete().eq('cliente_id', clienteId)
+    setData(p => { const next = { ...p }; delete next[clienteId]; return next })
+  }
+
   const clientes = Object.keys(data)
 
   return (
@@ -1766,11 +1772,17 @@ const TabEmpresasClientes = () => {
                       <div style={{ fontSize: 12, color: '#9CA3AF' }}>{empresas.length} empresa{empresas.length !== 1 ? 's' : ''} habilitada{empresas.length !== 1 ? 's' : ''}</div>
                     </div>
                   </div>
-                  <label style={{ background: uploadingFor === clienteId ? '#F1F5F9' : G, color: uploadingFor === clienteId ? '#9CA3AF' : '#fff', borderRadius: 6, padding: '7px 16px', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                    {uploadingFor === clienteId ? '⏳ Subiendo...' : '📂 Subir Excel'}
-                    <input type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} disabled={uploadingFor === clienteId}
-                      onChange={e => { if(e.target.files[0]) subirExcel(clienteId, e.target.files[0]); e.target.value = '' }} />
-                  </label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <label style={{ background: uploadingFor === clienteId ? '#F1F5F9' : G, color: uploadingFor === clienteId ? '#9CA3AF' : '#fff', borderRadius: 6, padding: '7px 16px', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      {uploadingFor === clienteId ? '⏳ Subiendo...' : '📂 Subir Excel'}
+                      <input type="file" accept=".xlsx,.xls,.csv" style={{ display: 'none' }} disabled={uploadingFor === clienteId}
+                        onChange={e => { if(e.target.files[0]) subirExcel(clienteId, e.target.files[0]); e.target.value = '' }} />
+                    </label>
+                    <button onClick={() => eliminarCliente(clienteId)}
+                      style={{ background: '#FEE2E2', color: '#B91C1C', border: 'none', borderRadius: 6, padding: '7px 12px', fontWeight: 700, fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      🗑 Eliminar
+                    </button>
+                  </div>
                 </div>
                 {/* Lista de empresas expandida */}
                 {abierto && (
