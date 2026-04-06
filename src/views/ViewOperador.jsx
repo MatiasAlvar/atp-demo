@@ -191,9 +191,6 @@ export default function ViewOperador({ user, onLogout }) {
               </div>
             ))
                 }
-              </div>
-            </div>
-
               {/* Borradores */}
               {borradores.length > 0 && (
                 <div style={{marginTop:16}}>
