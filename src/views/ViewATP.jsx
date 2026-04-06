@@ -1834,10 +1834,11 @@ const DOCS_STORAGE_KEY = 'atp_tipos_docs_custom'
 const GLOBAL_SITIO_ID  = '__GLOBAL__'
 
 const TabDocsSitios = () => {
-  const [docs, setDocs]         = useState([])
-  const [nuevoDoc, setNuevoDoc] = useState('')
-  const [saved, setSaved]       = useState(false)
-  const [loading, setLoading]   = useState(true)
+  const [docs, setDocs]             = useState([])
+  const [docsEliminados, setDocsEliminados] = useState([])
+  const [nuevoDoc, setNuevoDoc]     = useState('')
+  const [saved, setSaved]           = useState(false)
+  const [loading, setLoading]       = useState(true)
 
   // Cargar docs custom desde Supabase fila __GLOBAL__
   useEffect(() => {
@@ -1869,8 +1870,6 @@ const TabDocsSitios = () => {
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
-
-  const [docsEliminados, setDocsEliminados] = useState([])
 
   const eliminar = async (doc) => {
     if (!window.confirm('¿Eliminar el documento "' + doc + '"?')) return
