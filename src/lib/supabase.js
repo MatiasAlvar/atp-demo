@@ -150,8 +150,19 @@ export async function getSitiosConfig() {
 }
 
 export async function upsertSitioConfig(cfg) {
-  const { error } = await supabase.from('sitios_config').upsert(cfg, { onConflict: 'sitio_id' })
-  if (error) console.error(error)
+  // Check if row exists
+  const { data: existing } = await supabase.from('sitios_config').select('sitio_id').eq('sitio_id', cfg.sitio_id).single()
+  let error
+  if (existing) {
+    // UPDATE
+    const { error: e } = await supabase.from('sitios_config').update(cfg).eq('sitio_id', cfg.sitio_id)
+    error = e
+  } else {
+    // INSERT
+    const { error: e } = await supabase.from('sitios_config').insert(cfg)
+    error = e
+  }
+  if (error) console.error('upsertSitioConfig error:', error)
   return !error
 }
 
