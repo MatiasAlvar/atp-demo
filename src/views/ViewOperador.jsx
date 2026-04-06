@@ -24,9 +24,21 @@ export default function ViewOperador({ user, onLogout }) {
   const [loading, setLoading]       = useState(true)
   const [notif, setNotif]           = useState(null)
   const [detalleSol, setDetalleSol] = useState(null)
-  const [chatSol, setChatSol]       = useState(null)
-  const [cancelModal, setCancelModal] = useState(null)  // sol a cancelar
+  const [chatSol, setChatSol]         = useState(null)
+  const [cancelModal, setCancelModal] = useState(null)
   const [borradores, setBorradores]   = useState([])
+
+  async function confirmarCancelacion() {
+    if (!cancelModal) return
+    await supabase.from('solicitudes').update({estado:'Cancelado'}).eq('id', cancelModal.id)
+    setSolicitudes(p => p.map(s => s.id === cancelModal.id ? {...s, estado:'Cancelado'} : s))
+    setCancelModal(null)
+  }
+  function eliminarBorrador(idx) {
+    const next = borradores.filter((_, j) => j !== idx)
+    setBorradores(next)
+    localStorage.setItem('atp_borradores_' + user.operador, JSON.stringify(next))
+  }
   const [preFilledData, setPreFilledData] = useState(null)
   const [apiKey, setApiKey]         = useState(() => { try { return localStorage.getItem(APIKEY_KEY)||'' } catch { return '' } })
   const [showApiKey, setShowApiKey] = useState(false)
@@ -50,8 +62,7 @@ export default function ViewOperador({ user, onLogout }) {
     setReglas(reglasData)
     setSitiosConfig(sitiosCfg)
     setLoading(false)
-    // Cargar borradores del operador
-    try { setBorradores(JSON.parse(localStorage.getItem('atp_borradores_'+user.operador)||'[]')) } catch {}
+    try { setBorradores(JSON.parse(localStorage.getItem('atp_borradores_' + user.operador) || '[]')) } catch(e) {}
   }
 
   async function cargarAlertas() {
@@ -85,17 +96,13 @@ export default function ViewOperador({ user, onLogout }) {
       {cancelModal && (
         <div style={{position:'fixed',inset:0,background:'#00000077',display:'flex',alignItems:'center',justifyContent:'center',zIndex:999,padding:16}}>
           <div style={{background:'#fff',borderRadius:10,padding:28,maxWidth:400,width:'100%',boxShadow:'0 16px 48px #0003'}}>
-            <div style={{fontSize:28,textAlign:'center',marginBottom:10}}>🗑️ </div>
-            <div style={{fontWeight:700,fontSize:16,textAlign:'center',marginBottom:8}}>¿Cancelar solicitud?</div>
+            <div style={{fontSize:28,textAlign:'center',marginBottom:10}}>🗑</div>
+            <div style={{fontWeight:700,fontSize:16,textAlign:'center',marginBottom:8}}>Cancelar solicitud</div>
             <div style={{fontSize:13,color:C.textS,textAlign:'center',marginBottom:20}}>
               La solicitud <strong>{cancelModal.id}</strong> será cancelada y las fechas quedarán disponibles.
             </div>
             <div style={{display:'flex',gap:10}}>
-              <button onClick={async()=>{
-                await supabase.from('solicitudes').update({estado:'Cancelado'}).eq('id',cancelModal.id)
-                setSolicitudes(p=>p.map(s=>s.id===cancelModal.id?{...s,estado:'Cancelado'}:s))
-                setCancelModal(null)
-              }} style={{flex:1,background:C.red,color:'#fff',border:'none',borderRadius:6,padding:'10px 0',fontWeight:700,cursor:'pointer'}}>
+              <button onClick={confirmarCancelacion} style={{flex:1,background:C.red,color:'#fff',border:'none',borderRadius:6,padding:'10px 0',fontWeight:700,cursor:'pointer'}}>
                 Sí, cancelar
               </button>
               <button onClick={()=>setCancelModal(null)} style={{flex:1,background:'#F1F5F9',border:'none',borderRadius:6,padding:'10px 0',cursor:'pointer'}}>
@@ -139,7 +146,7 @@ export default function ViewOperador({ user, onLogout }) {
             {id:'lista', icon:'📋', label:'Mis Solicitudes'},
             {id:'nueva', icon:'➕', label:'Nueva Solicitud'},
             {id:'ia',    icon:'✨', label:'Carga con IA', badge:'IA',badgeColor:C.purple},
-            // Tab Empresas movido a ATP Admin (ViewATP TabDocumentos)
+
           ].map(n=>(
             <div key={n.id} onClick={()=>setView(n.id)} style={{display:'flex',alignItems:'center',gap:9,padding:'8px 14px',background:view===n.id?'#FFEBEE':C.white,borderLeft:view===n.id?`3px solid ${C.red}`:'3px solid transparent',cursor:'pointer'}}>
               <span style={{fontSize:13}}>{n.icon}</span>
@@ -185,25 +192,25 @@ export default function ViewOperador({ user, onLogout }) {
               <div key={s.id} style={{position:'relative'}}>
                 <SolRow s={s} onClick={()=>setDetalleSol(s)}/>
                 <button onClick={e=>{e.stopPropagation();setChatSol(s)}} title="Asistente" style={{position:'absolute',top:10,right:10,background:'none',border:'none',cursor:'pointer',fontSize:16}}>💬</button>
-                {!['Autorizado','Cancelado'].includes(s.estado) && (
-                  <button onClick={e=>{e.stopPropagation();setCancelModal(s)}} title="Cancelar solicitud" style={{position:'absolute',top:10,right:40,background:'none',border:'none',cursor:'pointer',fontSize:14,color:C.red}}>✕</button>
+                {s.estado !== 'Autorizado' && s.estado !== 'Cancelado' && (
+                  <button onClick={e=>{e.stopPropagation();setCancelModal(s)}} title="Cancelar" style={{position:'absolute',top:10,right:40,background:'none',border:'none',cursor:'pointer',fontSize:14,color:C.red}}>✕</button>
                 )}
               </div>
             ))
                 }
-              {/* Borradores */}
+              </div>
               {borradores.length > 0 && (
                 <div style={{marginTop:16}}>
-                  <div style={{fontWeight:700,fontSize:14,color:C.text,marginBottom:8}}>📝 Borradores guardados</div>
-                  {borradores.map((b,i) => (
+                  <div style={{fontWeight:700,fontSize:14,color:C.text,marginBottom:8}}>Borradores guardados</div>
+                  {borradores.map((b, i) => (
                     <div key={i} style={{background:'#FFFBEB',border:'1px solid #FCD34D',borderRadius:6,padding:'10px 14px',marginBottom:8,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                       <div>
-                        <div style={{fontWeight:600,fontSize:13}}>{b.sitio||'Sin sitio'} — {b.trabajo||'Sin trabajo'}</div>
-                        <div style={{fontSize:11,color:C.textS}}>Guardado: {b._savedAt||'—'}</div>
+                        <div style={{fontWeight:600,fontSize:13}}>{b.sitio || 'Sin sitio'} — {b.trabajo || 'Sin trabajo'}</div>
+                        <div style={{fontSize:11,color:C.textS}}>Guardado: {b._savedAt || '—'}</div>
                       </div>
                       <div style={{display:'flex',gap:8}}>
                         <button onClick={()=>{setPreFilledData(b);setView('nueva')}} style={{background:'#F59E0B',color:'#fff',border:'none',borderRadius:5,padding:'6px 12px',fontWeight:700,fontSize:12,cursor:'pointer'}}>Continuar</button>
-                        <button onClick={()=>{const next=borradores.filter((_,j)=>j!==i);setBorradores(next);localStorage.setItem('atp_borradores_'+user.operador,JSON.stringify(next))}} style={{background:'#FEE2E2',color:C.red,border:'none',borderRadius:5,padding:'6px 10px',fontSize:12,cursor:'pointer'}}>✕</button>
+                        <button onClick={()=>eliminarBorrador(i)} style={{background:'#FEE2E2',color:C.red,border:'none',borderRadius:5,padding:'6px 10px',fontSize:12,cursor:'pointer'}}>X</button>
                       </div>
                     </div>
                   ))}
@@ -225,7 +232,7 @@ export default function ViewOperador({ user, onLogout }) {
           {!loading && view==='ia' && (
             <TabIA apiKey={apiKey} onPreFill={d=>{setPreFilledData(d);setView('nueva')}} showNotif={showNotif}/>
           )}
-          {/* Tab empresas movido a ATP Admin */}
+
         </div>
       </div>
     </div>
@@ -237,7 +244,7 @@ export default function ViewOperador({ user, onLogout }) {
 /* ─── CHATBOT RULE-BASED (sin API key) ─────────────────── */
 function ChatbotAsistente({ sol, sitio, onClose, C }) {
   const [msgs, setMsgs] = useState([
-    { from: 'bot', text: `Hola, soy el asistente de ATP Chile. Puedo responder preguntas sobre la solicitud ${sol?.id || ''}. ¿En qué le puedo ayudar?` }
+    { from: 'bot', text: `Hola, soy el asistente de ATP Chile. Puedo responder preguntas sobre la solicitud **${sol?.id || ''}**. ¿En qué le puedo ayudar?` }
   ])
   const [input, setInput] = useState('')
   const endRef = useRef(null)
@@ -248,15 +255,15 @@ function ChatbotAsistente({ sol, sitio, onClose, C }) {
     if (!sol) return 'No hay solicitud seleccionada.'
     const ql = q.toLowerCase()
     if (/estado|cómo va|resultado|aprobad|rechazad|autorizado/.test(ql))
-      return `El estado actual de la solicitud ${sol.id} es ${sol.estado}.${sol.motivoRechazo ? ` Motivo: ${sol.motivoRechazo}` : ''}`
+      return `El estado actual de la solicitud ${sol.id} es **${sol.estado}**.${sol.motivoRechazo ? ` Motivo: ${sol.motivoRechazo}` : ''}`
     if (/fecha|cuándo|día|plazo/.test(ql))
-      return `La solicitud contempla acceso desde el ${sol.desde || '—'} hasta el ${sol.hasta || '—'}.`
+      return `La solicitud contempla acceso desde el **${sol.desde || '—'}** hasta el **${sol.hasta || '—'}**.`
     if (/sitio|lugar|dónde|ubicación/.test(ql))
-      return `El sitio es ${sol.sitio}${sitio?.region ? ` (${sitio.region}, ${sitio.comuna})` : ''}. Tipo: ${sitio?.tipo || '—'}.`
+      return `El sitio es **${sol.sitio}**${sitio?.region ? ` (${sitio.region}, ${sitio.comuna})` : ''}. Tipo: ${sitio?.tipo || '—'}.`
     if (/trabajo|faena|qué van|qué se/.test(ql))
-      return `El tipo de trabajo es: ${sol.trabajo || '—'}.`
+      return `El tipo de trabajo es: **${sol.trabajo || '—'}**.`
     if (/empresa|contratista|quién hace/.test(ql))
-      return `La empresa contratista es ${sol.empresaNombre || sol.empresa || '—'}.`
+      return `La empresa contratista es **${sol.empresaNombre || sol.empresa || '—'}**.`
     if (/técnico|personal|trabajador|quién va|rut/.test(ql)) {
       const trab = (sol.trabajadores || []).filter(t => t.nombre)
       if (!trab.length) return 'No hay personal registrado en esta solicitud.'
@@ -291,7 +298,7 @@ function ChatbotAsistente({ sol, sitio, onClose, C }) {
         color: msg.from === 'user' ? '#fff' : C.text,
         fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap',
       }}>
-        {msg.text.split('**').filter((_,i)=>i%2===0).join('')||msg.text}
+        {msg.text.replace(/\*\*(.*?)\*\*/g, '$1')}
       </div>
     </div>
   )
@@ -678,16 +685,16 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
 
   const mySitios = TODOS_SITIOS.filter(s => { const cols = COLOCALIZACIONES[s.id]||[]; return cols.length===0 ? true : cols.includes(user.operador) })
 
+  const empresasDelOperador = useMemo(() => {
+    if (empresasOperador.length > 0) return empresasOperador
+    return empresas
+  }, [empresas, empresasOperador])
+
   const [empresasOperador, setEmpresasOperador] = useState([])
   useEffect(() => {
     supabase.from('empresas_contratistas').select('nombre,rut').eq('cliente_id', user.operador)
-      .then(({ data }) => { if (data?.length) setEmpresasOperador(data) })
+      .then(({ data }) => { if (data && data.length) setEmpresasOperador(data) })
   }, [user.operador])
-
-  const empresasDelOperador = useMemo(() => {
-    if (empresasOperador.length > 0) return empresasOperador
-    return empresas  // fallback a todas si no hay lista específica
-  }, [empresas, empresasOperador])
 
   const empresasFiltradas = useMemo(() => {
     if (!empresaBusq || empresaBusq.length < 2) return []
@@ -791,6 +798,15 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
     setShowNuevaEmpresa(false)
     setNuevaEmpresa({rut:'',nombre:''})
     showNotif('✅ Empresa creada','success')
+  }
+
+  function guardarBorrador() {
+    const borrador = {...form, _savedAt: new Date().toLocaleString('es-CL')}
+    const key = 'atp_borradores_' + user.operador
+    let prev = []
+    try { prev = JSON.parse(localStorage.getItem(key) || '[]') } catch(e) {}
+    localStorage.setItem(key, JSON.stringify([...prev, borrador]))
+    showNotif('Borrador guardado', 'success')
   }
 
   async function validarDocConIA(docTipo, file) {
@@ -932,15 +948,11 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
             motivo_no_acreditado: 'Pendiente revisión',
           }
           try {
-            const { error: upsertErr } = await supabase.from('trabajadores_acreditados')
-              .upsert(
-                { rut: nuevo.rut, nombre: nuevo.nombre, empresa_nombre: nuevo.empresa_nombre, operador: nuevo.operador, acreditado: null, vencimiento: '', motivo_no_acreditado: 'Pendiente revisión' },
-                { onConflict: 'rut' }
-              )
-            if (!upsertErr) {
-              // Recargar lista desde Supabase para garantizar persistencia
-              getTrabajadores().then(trabs => setTrabajadores(trabs))
-            }
+            await supabase.from('trabajadores_acreditados').upsert(
+              { rut: nuevo.rut, nombre: nuevo.nombre, empresa_nombre: nuevo.empresa_nombre, operador: nuevo.operador, acreditado: null, vencimiento: '', motivo_no_acreditado: 'Pendiente revisión' },
+              { onConflict: 'rut' }
+            )
+            getTrabajadores().then(trabs => setTrabajadores(trabs))
           } catch(err) { console.error('upsert trabajador:', err) }
         }
       }
@@ -1362,19 +1374,12 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
 
       <div style={{display:'flex',justifyContent:'flex-end',gap:12}}>
         <button onClick={onBack} style={{background:'transparent',color:C.red,border:'none',cursor:'pointer',fontWeight:600,fontSize:13,padding:'9px 16px'}}>Cancelar</button>
+        <button onClick={guardarBorrador} style={{background:'#FEF3C7',color:'#92400E',border:'1px solid #FCD34D',borderRadius:4,padding:'9px 16px',fontWeight:700,fontSize:13,cursor:'pointer'}}>
+          Guardar borrador
+        </button>
         {(!isValidEmail(form.correoMandante) || !isValidEmail(form.correoContratista)) && (
           <span style={{fontSize:12,color:C.orange,alignSelf:'center'}}>⚠ Completa los correos para continuar</span>
         )}
-        <button onClick={()=>{
-          const borrador = {...form, _savedAt: new Date().toLocaleString('es-CL')}
-          const key = 'atp_borradores_' + user.operador
-          const prev = (() => { try { return JSON.parse(localStorage.getItem(key)||'[]') } catch { return [] } })()
-          const next = [...prev, borrador]
-          localStorage.setItem(key, JSON.stringify(next))
-          showNotif('📝 Borrador guardado', 'success')
-        }} style={{background:'#FEF3C7',color:'#92400E',border:'1px solid #FCD34D',borderRadius:4,padding:'9px 16px',fontWeight:700,fontSize:13,cursor:'pointer'}}>
-          Guardar borrador
-        </button>
         {(() => {
           const canSend = !!(
             form.sitio && form.trabajo && form.empresa &&
