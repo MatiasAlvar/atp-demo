@@ -222,10 +222,19 @@ export default function ViewOperador({ user, onLogout }) {
           {!loading && view==='nueva' && (
             <FormNuevaSolicitud
               user={user} solicitudes={solicitudes} setSolicitudes={setSolicitudes}
-              trabajadores={trabajadores} empresas={empresas} setEmpresas={setEmpresas}
+              trabajadores={trabajadores} setTrabajadores={setTrabajadores}
+              empresas={empresas} setEmpresas={setEmpresas}
               alertas={alertas} reglas={reglas} sitiosConfig={sitiosConfig}
               showNotif={showNotif} onBack={()=>{setView('lista');setPreFilledData(null)}}
               initialData={preFilledData}
+              onBorradorGuardado={b=>{
+                const key='atp_borradores_'+user.operador
+                let prev=[]
+                try{prev=JSON.parse(localStorage.getItem(key)||'[]')}catch(e){}
+                const next=[...prev,b]
+                localStorage.setItem(key,JSON.stringify(next))
+                setBorradores(next)
+              }}
             />
           )}
 
@@ -644,7 +653,7 @@ function rutInFilename(fileName, trabajadores) {
   })
 }
 
-function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, empresas, setEmpresas, alertas, reglas, sitiosConfig, showNotif, onBack, initialData }) {
+function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, setTrabajadores, empresas, setEmpresas, alertas, reglas, sitiosConfig, showNotif, onBack, initialData, onBorradorGuardado }) {
   const [form, setForm] = useState({
     operador: user.operador,
     empresa: initialData?.rut_empresa || '',
@@ -802,10 +811,7 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, e
 
   function guardarBorrador() {
     const borrador = {...form, _savedAt: new Date().toLocaleString('es-CL')}
-    const key = 'atp_borradores_' + user.operador
-    let prev = []
-    try { prev = JSON.parse(localStorage.getItem(key) || '[]') } catch(e) {}
-    localStorage.setItem(key, JSON.stringify([...prev, borrador]))
+    if (onBorradorGuardado) onBorradorGuardado(borrador)
     showNotif('Borrador guardado', 'success')
   }
 
