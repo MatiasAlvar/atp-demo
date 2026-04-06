@@ -1463,7 +1463,7 @@ function TabIA({ apiKey, onPreFill, showNotif }) {
     const si = setInterval(() => setParseStep(s => Math.min(s+1, steps.length-1)), 900)
     try {
       const base64 = await new Promise((res,rej) => { const r=new FileReader(); r.onload=()=>res(r.result.split(',')[1]); r.onerror=rej; r.readAsDataURL(file) })
-      const sitiosInfo = SITIOS.map(s=>`${s.id}: ${s.nombre} (${s.region})`).join('\n')
+      const sitiosInfo = TODOS_SITIOS.map(s=>`${s.id}: ${s.nombre} (${s.region})`).join('\n')
 
       // ── PASO 1: Validar tipo de documento (si no es "cualquiera") ──
       if (tipoDoc && tipoDoc.id !== 'cualquiera') {
