@@ -912,8 +912,15 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, s
     setSubmitting(true)
     await new Promise(r => setTimeout(r, 1200))
     const v = validarSolicitud({...form, trabajadores: trab}, solicitudes)
-    const est = 'En Gestión Propietario'
-    const hist = [
+    // Liberación automática: si el sitio tiene liberacion_auto activa y el trabajo está en la lista
+    const liberAuto = sitiosConfig[form.sitio]?.liberacion_auto
+    const trabajoBase = form.trabajo?.includes(' (máx') ? form.trabajo.split(' (máx')[0].trim() : form.trabajo
+    const esLiberacionAuto = liberAuto?.activa && liberAuto?.trabajos?.includes(trabajoBase)
+    const est = esLiberacionAuto ? 'Autorizado' : 'En Gestión Propietario'
+    const hist = esLiberacionAuto ? [
+      {estado:'Enviado',    fecha: new Date().toLocaleString('es-CL'), auto:false},
+      {estado:'Autorizado', fecha: new Date().toLocaleString('es-CL'), auto:true, nota:'Liberación automática'},
+    ] : [
       {estado:'Enviado',               fecha: new Date().toLocaleString('es-CL'), auto:false},
       {estado:'En Validación',         fecha: new Date().toLocaleString('es-CL'), auto:true},
       {estado:'Validado',              fecha: new Date().toLocaleString('es-CL'), auto:true},
