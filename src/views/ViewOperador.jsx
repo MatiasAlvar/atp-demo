@@ -85,7 +85,7 @@ export default function ViewOperador({ user, onLogout }) {
       {cancelModal && (
         <div style={{position:'fixed',inset:0,background:'#00000077',display:'flex',alignItems:'center',justifyContent:'center',zIndex:999,padding:16}}>
           <div style={{background:'#fff',borderRadius:10,padding:28,maxWidth:400,width:'100%',boxShadow:'0 16px 48px #0003'}}>
-            <div style={{fontSize:28,textAlign:'center',marginBottom:10}}>🗑️</div>
+            <div style={{fontSize:28,textAlign:'center',marginBottom:10}}>🗑️ </div>
             <div style={{fontWeight:700,fontSize:16,textAlign:'center',marginBottom:8}}>¿Cancelar solicitud?</div>
             <div style={{fontSize:13,color:C.textS,textAlign:'center',marginBottom:20}}>
               La solicitud <strong>{cancelModal.id}</strong> será cancelada y las fechas quedarán disponibles.
