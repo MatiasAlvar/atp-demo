@@ -952,8 +952,9 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, s
     // Auto-registrar trabajadores nuevos (no están en BBDD)
     try {
       for (const t of trab) {
-        const yaExiste = trabajadores.some(w => w.rut === t.rut)
-        if (!yaExiste && validRUT(t.rut) && t.nombre) {
+        const rutClean = t.rut.replace(/[^0-9kK]/gi,'')
+        const yaExiste = trabajadores.some(w => w.rut === t.rut || w.rut?.replace(/[^0-9kK]/gi,'') === rutClean)
+        if (!yaExiste && t.rut && t.nombre) {
           const nuevo = {
             id: 'trab-' + t.rut.replace(/[^0-9kK]/g,''),
             rut: t.rut,
@@ -1413,7 +1414,7 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, s
             isValidEmail(form.correoMandante) && isValidEmail(form.correoContratista) &&
             !(sitiosConfig[form.sitio]?.docs_requeridos?.some(d => !docsFiles[d])) &&
             !Object.values(docInvalid).some(Boolean) &&
-            !hayConflictoFechas(form.desde, form.hasta) &&
+            !(form.trabajo?.includes('EMERGENCIA') ? false : hayConflictoFechas(form.desde, form.hasta)) &&
             !submitting
           )
           return (

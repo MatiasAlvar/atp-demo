@@ -525,7 +525,8 @@ const FotosModal = ({ sitioId, sitioNombre, onClose, soloVer = false }) => {
     for (const file of files) {
       const ext  = file.name.split('.').pop().toLowerCase()
       const name = Date.now() + '_' + Math.random().toString(36).slice(2) + '.' + ext
-      await supabase.storage.from('sitio-fotos').upload(sitioId + '/' + name, file, { upsert: false })
+      const { error: upErr } = await supabase.storage.from('sitio-fotos').upload(sitioId + '/' + name, file, { upsert: false })
+      if (upErr) { alert('Error al subir: ' + upErr.message); setUploading(false); return }
     }
     await recargar()
     setUploading(false)
