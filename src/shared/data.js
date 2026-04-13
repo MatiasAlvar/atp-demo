@@ -148,7 +148,8 @@ export function validarSolicitud(sol, solicitudes = []) {
     if (dias > max) errores.push(`Ventana de ${dias} días excede máximo (${max}d para ${sol.trabajo})`)
   }
 
-  if (sol.desde && sol.hasta) {
+  const esEmergencia = sol.trabajo?.includes('EMERGENCIA')
+  if (!esEmergencia && sol.desde && sol.hasta) {
     const conflictos = solicitudes.filter(s =>
       s.id !== sol.id &&
       s.sitio === sol.sitio &&
