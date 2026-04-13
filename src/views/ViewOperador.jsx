@@ -370,7 +370,7 @@ function SolRow({ s, onClick }) {
 
 
 /* ─── DATE RANGE PICKER — bloquea fechas ocupadas ─────────── */
-function DateRangePicker({ desde, hasta, onDesde, onHasta, fechasOcupadas, maxDias, restriccionHoraria, C }) {
+function DateRangePicker({ desde, hasta, onDesde, onHasta, fechasOcupadas, maxDias, restriccionHoraria, esEmergencia, C }) {
   const [mes, setMes] = useState(() => {
     const d = desde ? new Date(desde + 'T12:00:00') : new Date()
     return new Date(d.getFullYear(), d.getMonth(), 1)
@@ -397,7 +397,8 @@ function DateRangePicker({ desde, hasta, onDesde, onHasta, fechasOcupadas, maxDi
   }
 
   function handleClick(iso) {
-    if (isBlocked(iso) || isPast(iso) || isRestriccion(iso)) return
+    if (isPast(iso)) return
+    if (!esEmergencia && (isBlocked(iso) || isRestriccion(iso))) return
     if (!desde || (desde && hasta)) {
       onDesde(iso); onHasta('')
     } else {
@@ -405,7 +406,7 @@ function DateRangePicker({ desde, hasta, onDesde, onHasta, fechasOcupadas, maxDi
       else {
         // Check no blocked dates in range
         const hasBlock = fechasOcupadas.some(r => !(iso < r.desde || desde > r.hasta))
-        if (hasBlock) return
+        if (hasBlock && !esEmergencia) return
         // Check maxDias
         if (maxDias) {
           const dias = Math.ceil((new Date(iso) - new Date(desde)) / 86400000) + 1
@@ -869,7 +870,7 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, s
     }
     // Validar horas
     if (!form.horaInicio || !form.horaFin) { showNotif('❌ Ingresa la hora de ingreso y salida', 'error'); return }
-    if (form.desde === form.hasta && form.horaFin <= form.horaInicio) { showNotif('❌ La hora de salida debe ser mayor a la hora de ingreso', 'error'); return }
+    if (form.horaFin <= form.horaInicio) { showNotif('❌ La hora de salida debe ser mayor a la hora de ingreso', 'error'); return }
     // Validar contra restricción horaria del sitio (sitiosConfig)
     const rh = sitiosConfig[form.sitio]?.restriccion_horaria
     if (rh?.activa && rh.hora_desde && rh.hora_hasta) {
@@ -1232,6 +1233,7 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, s
               fechasOcupadas={fechasOcupadas}
               maxDias={(() => { const t = form.trabajo; if (!t) return null; const k = t.includes(' (máx') ? t.split(' (máx')[0] : t; return VENTANA_MAX[k] || null })()}
               restriccionHoraria={sitiosConfig[form.sitio]?.restriccion_horaria}
+              esEmergencia={form.trabajo?.includes('EMERGENCIA')}
               C={C}
             />
           </div>
@@ -1249,7 +1251,7 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, s
                 <input type="time" value={form.horaFin} onChange={e=>set('horaFin',e.target.value)} style={inp}
                   min={sitiosConfig[form.sitio]?.restriccion_horaria?.activa ? sitiosConfig[form.sitio].restriccion_horaria.hora_desde : undefined}
                   max={sitiosConfig[form.sitio]?.restriccion_horaria?.activa ? sitiosConfig[form.sitio].restriccion_horaria.hora_hasta : undefined}/>
-                {form.desde===form.hasta && form.horaInicio && form.horaFin && form.horaFin <= form.horaInicio && (
+                {form.horaInicio && form.horaFin && form.horaFin <= form.horaInicio && (
                   <div style={{fontSize:11,color:C.red,marginTop:3}}>⛔ Hora salida debe ser mayor a hora de ingreso</div>
                 )}
               </div>
