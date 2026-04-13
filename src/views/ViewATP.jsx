@@ -85,7 +85,7 @@ const TABS = [
   { id: 'docs_sitios', label: 'Docs para Sitios',  Icon: Ic.file    },
   { id: 'historial',   label: 'Historial',        Icon: Ic.history },
   { id: 'config',      label: 'Configuración',    Icon: Ic.settings },
-  { id: 'tecnicos',    label: 'Técnicos',          Icon: Ic.users  },
+  { id: 'tecnicos',    label: 'Técnicos',          Icon: Ic.check  },
   { id: 'alertas',     label: '🚨 Alertas',         Icon: Ic.warn },
 ]
 
