@@ -992,7 +992,7 @@ const WaChat = ({ sol, site, onUpdateEstado }) => {
   const [msgs, setMsgs] = useState([
     {
       from: 'system', time: '',
-      text: `Conversación con ${site?.propietario || 'Propietario'} · Sitio ${sol.sitioId}`,
+      text: `Conversación con ${site?.propietario || 'Propietario'} · Sitio ${sol.sitio || sol.sitioId || '—'}`,
     },
     {
       from: 'bot',
@@ -1097,7 +1097,7 @@ const WaChat = ({ sol, site, onUpdateEstado }) => {
             {site?.propietario || 'Propietario'}
           </div>
           <div style={{ color: '#8696A0', fontSize: 11 }}>
-            {loading ? 'escribiendo…' : `Sitio ${sol.sitioId}`}
+            {loading ? 'escribiendo…' : `Sitio ${sol.sitio || sol.sitioId || '—'}`}
           </div>
         </div>
         <div>
