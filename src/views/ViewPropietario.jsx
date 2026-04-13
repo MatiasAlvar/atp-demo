@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase, getSolicitudes, updateEstado, fromDb } from '../lib/supabase.js'
+import { enviarCorreoAutorizacion } from '../lib/email.js'
 import { SITIOS, TRABAJO_INFORMAL, C, ESTADO_COLOR } from '../shared/data.js'
 import { ATPLogo, GlobalStyle, Badge } from '../shared/components.jsx'
 
@@ -79,7 +80,11 @@ export default function ViewPropietario({ user, onLogout }) {
       ...(nuevoEstado === 'Rechazado' && motivo ? { motivo_rechazo: motivo } : {})
     })
     setAccion({ id: solId, tipo: decision, done: true })
-    // 3) Confirmar desde DB a los 2s para sincronizar
+    // 3) Enviar correo al operador si se autorizó
+    if (nuevoEstado === 'Autorizado') {
+      try { await enviarCorreoAutorizacion({ solicitud: { ...sol, estado: 'Autorizado' } }) } catch(e) {}
+    }
+    // 4) Confirmar desde DB a los 2s para sincronizar
     setTimeout(async () => {
       const { data } = await supabase.from('solicitudes').select('*').eq('id',solId).single()
       if (data) setSolicitudes(prev => prev.map(s => s.id===solId ? fromDb(data) : s))

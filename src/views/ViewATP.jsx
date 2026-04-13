@@ -85,6 +85,7 @@ const TABS = [
   { id: 'docs_sitios', label: 'Docs para Sitios',  Icon: Ic.file    },
   { id: 'historial',   label: 'Historial',        Icon: Ic.history },
   { id: 'config',      label: 'Configuración',    Icon: Ic.settings },
+  { id: 'tecnicos',    label: 'Técnicos',          Icon: Ic.users  },
   { id: 'alertas',     label: '🚨 Alertas',         Icon: Ic.warn },
 ]
 
@@ -347,6 +348,11 @@ const TabSolicitudes = ({ sols, setSols }) => {
     await supabaseUpdateEstado(id, 'Autorizado')
     setSols(p => p.map(s => s.id === id ? { ...s, estado: 'Autorizado' } : s))
     if (sel?.id === id) setSel(p => ({ ...p, estado: 'Autorizado' }))
+    // Enviar correo de autorización al operador
+    try {
+      const sol = sols.find(s => s.id === id)
+      if (sol) { const { enviarCorreoAutorizacion } = await import('../lib/email.js'); await enviarCorreoAutorizacion({ solicitud: { ...sol, estado: 'Autorizado' } }) }
+    } catch(e) {}
   }
   const reject = async id => {
     if (!motivo.trim()) return
@@ -1698,6 +1704,19 @@ const TabEmpresasClientes = () => {
     setModalCliente(false)
   }
 
+  function normalizarRUT(raw) {
+    if (!raw) return ''
+    const clean = raw.replace(/[^0-9kK]/g, '')
+    if (clean.length < 2) return raw
+    const dv   = clean.slice(-1).toUpperCase()
+    const body = clean.slice(0, -1)
+    // Format body with dots: XX.XXX.XXX
+    let formatted = ''
+    const rev = body.split('').reverse()
+    rev.forEach((d, i) => { if (i > 0 && i % 3 === 0) formatted = '.' + formatted; formatted = d + formatted })
+    return formatted + '-' + dv
+  }
+
   const subirExcel = async (clienteId, file) => {
     setUploadingFor(clienteId)
     try {
@@ -1716,7 +1735,7 @@ const TabEmpresasClientes = () => {
       const parsed = rows.map(r => ({
         cliente_id: clienteId,
         nombre: (r['empresa contratista'] || r['Empresa Contratista'] || r['nombre'] || r['Nombre'] || Object.values(r)[0] || '').toString().trim(),
-        rut:    (r['rut'] || r['RUT'] || r['Rut'] || Object.values(r)[1] || '').toString().trim(),
+        rut:    normalizarRUT((r['rut'] || r['RUT'] || r['Rut'] || Object.values(r)[1] || '').toString().trim()),
       })).filter(r => r.nombre && r.rut)
       if (!parsed.length) { alert('Sin datos válidos. Columnas requeridas: "empresa contratista" y "rut"'); setUploadingFor(null); return }
       await supabase.from('empresas_contratistas').delete().eq('cliente_id', clienteId)
@@ -2191,6 +2210,72 @@ const SECTIONS = {
   alertas:     { title: '🚨 Alertas Operativas',   sub: 'Técnicos bloqueados · Reclamos · Anomalías detectadas' },
 }
 
+/* ════════════════════════════════════════════════════════════
+   TAB TÉCNICOS
+   ════════════════════════════════════════════════════════════ */
+const TabTecnicos = () => {
+  const [tecns, setTecns]     = useState([])
+  const [loading, setLoading] = useState(true)
+  const [busq, setBusq]       = useState('')
+
+  useEffect(() => {
+    supabase.from('trabajadores_acreditados').select('*').order('nombre')
+      .then(({ data }) => { if (data) setTecns(data); setLoading(false) })
+  }, [])
+
+  const filtrados = busq.trim()
+    ? tecns.filter(t => t.nombre?.toLowerCase().includes(busq.toLowerCase()) || (t.rut||'').includes(busq))
+    : tecns
+
+  return (
+    <div className="fade-up" style={{ padding: 28 }}>
+      <Card style={{ overflow: 'hidden' }}>
+        <CardHeader title="Base de datos de técnicos" icon={Ic.users} />
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #F0F0F0', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <input value={busq} onChange={e => setBusq(e.target.value)} placeholder="Buscar por nombre o RUT..."
+            style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid #E5E7EB', fontSize: 13, fontFamily: 'IBM Plex Sans', outline: 'none' }} />
+          <span style={{ fontSize: 12, color: '#6B7280' }}>{filtrados.length} técnico{filtrados.length !== 1 ? 's' : ''}</span>
+        </div>
+        {loading ? (
+          <div style={{ padding: 32, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Cargando...</div>
+        ) : filtrados.length === 0 ? (
+          <div style={{ padding: 32, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>
+            {busq ? 'Sin resultados.' : 'Sin técnicos registrados. Se agregan automáticamente al ingresar solicitudes.'}
+          </div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#F8FAFC' }}>
+                {['Nombre','RUT','Empresa','Operador','Estado','Vencimiento'].map(h => (
+                  <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: .5, borderBottom: '1px solid #E5E7EB' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtrados.map((t, i) => (
+                <tr key={t.id || i} style={{ borderBottom: '1px solid #F0F0F0', background: i % 2 === 0 ? '#fff' : '#FAFAFA' }}>
+                  <td style={{ padding: '10px 16px', fontSize: 13, fontWeight: 500, color: '#1A1A1A' }}>{t.nombre || '—'}</td>
+                  <td style={{ padding: '10px 16px', fontSize: 12, color: '#6B7280', fontFamily: 'monospace' }}>{t.rut || '—'}</td>
+                  <td style={{ padding: '10px 16px', fontSize: 12, color: '#374151' }}>{t.empresa_nombre || '—'}</td>
+                  <td style={{ padding: '10px 16px', fontSize: 12, color: '#374151' }}>{t.operador || '—'}</td>
+                  <td style={{ padding: '10px 16px' }}>
+                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, fontWeight: 600,
+                      background: t.acreditado === true ? '#DCFCE7' : t.acreditado === false ? '#FEF2F2' : '#FEF3C7',
+                      color:      t.acreditado === true ? '#15803D' : t.acreditado === false ? '#DC2626' : '#92400E' }}>
+                      {t.acreditado === true ? 'Acreditado' : t.acreditado === false ? 'No acreditado' : 'Pendiente'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px 16px', fontSize: 12, color: '#6B7280' }}>{t.vencimiento || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+    </div>
+  )
+}
+
 export default function ViewATP({ onLogout }) {
   const [tab,  setTab]  = useState('dashboard')
   const [sols, setSols] = useState([])
@@ -2236,6 +2321,7 @@ export default function ViewATP({ onLogout }) {
       case 'docs_sitios': return <TabDocsSitios />
       case 'historial':   return <TabHistorial   sols={sols} />
       case 'config':      return <TabConfig />
+      case 'tecnicos':    return <TabTecnicos />
       case 'alertas':     return <TabAlertas sols={sols} />
       default:            return <TabDashboard   sols={sols} />
     }
