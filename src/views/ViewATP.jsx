@@ -2229,21 +2229,18 @@ const TabTecnicos = () => {
 
   return (
     <div className="fade-up" style={{ padding: 28 }}>
-      <Card style={{ overflow: 'hidden' }}>
-        <div style={{ padding: '14px 20px', borderBottom: '1px solid #F0F0F0', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Ic.users w={16} h={16} style={{ color: G }} />
-          <span style={{ fontWeight: 700, fontSize: 14, color: BK }}>Base de datos de técnicos</span>
-        </div>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #F0F0F0', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <input value={busq} onChange={e => setBusq(e.target.value)} placeholder="Buscar por nombre o RUT..."
-            style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid #E5E7EB', fontSize: 13, fontFamily: 'IBM Plex Sans', outline: 'none' }} />
-          <span style={{ fontSize: 12, color: '#6B7280' }}>{filtrados.length} técnico{filtrados.length !== 1 ? 's' : ''}</span>
+      <div style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid #E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <span style={{ fontWeight: 700, fontSize: 15, color: BK }}>Base de datos de técnicos</span>
+          <input value={busq} onChange={e => setBusq(e.target.value)} placeholder="Buscar nombre o RUT..."
+            style={{ padding: '7px 12px', borderRadius: 6, border: '1px solid #E5E7EB', fontSize: 13, fontFamily: 'IBM Plex Sans', outline: 'none', width: 240 }} />
+          <span style={{ fontSize: 12, color: '#6B7280', whiteSpace: 'nowrap' }}>{filtrados.length} técnico{filtrados.length !== 1 ? 's' : ''}</span>
         </div>
         {loading ? (
           <div style={{ padding: 32, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>Cargando...</div>
         ) : filtrados.length === 0 ? (
           <div style={{ padding: 32, textAlign: 'center', color: '#9CA3AF', fontSize: 13 }}>
-            {busq ? 'Sin resultados.' : 'Sin técnicos registrados. Se agregan automáticamente al ingresar solicitudes.'}
+            {busq ? 'Sin resultados.' : 'Sin técnicos registrados. Se agregan al ingresar solicitudes.'}
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -2257,14 +2254,14 @@ const TabTecnicos = () => {
             <tbody>
               {filtrados.map((t, i) => (
                 <tr key={t.id || i} style={{ borderBottom: '1px solid #F0F0F0', background: i % 2 === 0 ? '#fff' : '#FAFAFA' }}>
-                  <td style={{ padding: '10px 16px', fontSize: 13, fontWeight: 500, color: '#1A1A1A' }}>{t.nombre || '—'}</td>
+                  <td style={{ padding: '10px 16px', fontSize: 13, fontWeight: 500, color: BK }}>{t.nombre || '—'}</td>
                   <td style={{ padding: '10px 16px', fontSize: 12, color: '#6B7280', fontFamily: 'monospace' }}>{t.rut || '—'}</td>
                   <td style={{ padding: '10px 16px', fontSize: 12, color: '#374151' }}>{t.empresa_nombre || '—'}</td>
                   <td style={{ padding: '10px 16px', fontSize: 12, color: '#374151' }}>{t.operador || '—'}</td>
                   <td style={{ padding: '10px 16px' }}>
                     <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, fontWeight: 600,
                       background: t.acreditado === true ? '#DCFCE7' : t.acreditado === false ? '#FEF2F2' : '#FEF3C7',
-                      color:      t.acreditado === true ? '#15803D' : t.acreditado === false ? '#DC2626' : '#92400E' }}>
+                      color: t.acreditado === true ? '#15803D' : t.acreditado === false ? '#DC2626' : '#92400E' }}>
                       {t.acreditado === true ? 'Acreditado' : t.acreditado === false ? 'No acreditado' : 'Pendiente'}
                     </span>
                   </td>
@@ -2274,7 +2271,7 @@ const TabTecnicos = () => {
             </tbody>
           </table>
         )}
-      </Card>
+      </div>
     </div>
   )
 }
