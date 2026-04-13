@@ -454,10 +454,10 @@ function DateRangePicker({ desde, hasta, onDesde, onHasta, fechasOcupadas, maxDi
           const exceedsMax = maxDias && desde && !hasta && iso > desde &&
             Math.ceil((new Date(iso) - new Date(desde)) / 86400000) + 1 > maxDias
           const restriccion = isRestriccion(iso)
-          const disabled = blocked || past || exceedsMax || restriccion
-          const bg = selStart||selEnd ? C.red : inRange ? C.redL : blocked ? '#FFCDD2' : restriccion ? '#E5E7EB' : exceedsMax ? '#F3F4F6' : 'transparent'
-          const color = selStart||selEnd ? '#fff' : blocked ? C.red : past||exceedsMax||restriccion ? C.gray3 : C.text
-          const title = blocked ? 'Fecha reservada' : restriccion ? 'Día no permitido en este sitio' : ''
+          const disabled = (blocked && !esEmergencia) || past || exceedsMax || (restriccion && !esEmergencia)
+          const bg = selStart||selEnd ? C.red : inRange ? C.redL : (blocked && !esEmergencia) ? '#FFCDD2' : (restriccion && !esEmergencia) ? '#E5E7EB' : exceedsMax ? '#F3F4F6' : (blocked && esEmergencia) ? '#FFF3CD' : 'transparent'
+          const color = selStart||selEnd ? '#fff' : (blocked && !esEmergencia) ? C.red : past||exceedsMax||(restriccion&&!esEmergencia) ? C.gray3 : C.text
+          const title = (blocked && !esEmergencia) ? 'Fecha reservada' : (blocked && esEmergencia) ? 'Emergencia — acceso permitido' : (restriccion && !esEmergencia) ? 'Día no permitido en este sitio' : ''
           return (
             <div key={iso} title={title} onClick={()=>handleClick(iso)} style={{
               textAlign:'center',padding:'5px 2px',borderRadius:4,fontSize:12,fontWeight:(selStart||selEnd)?700:400,
