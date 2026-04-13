@@ -487,6 +487,111 @@ const TabSolicitudes = ({ sols, setSols }) => {
    LEAFLET MAP COMPONENT — versión nueva exacta
    (CartoDB dark_all + puntos hover + popups dark)
    ════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════
+   FOTOS DE SITIO — Storage Supabase
+   ════════════════════════════════════════════════════════════ */
+function useFotosSitio(sitioId) {
+  const [fotos, setFotos] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  const cargar = async () => {
+    if (!sitioId) { setFotos([]); return }
+    setLoading(true)
+    const { data } = await supabase.storage.from('sitio-fotos').list(sitioId, { limit: 10 })
+    if (data) {
+      const urls = data.map(f => ({
+        name: f.name,
+        url: supabase.storage.from('sitio-fotos').getPublicUrl(sitioId + '/' + f.name).data.publicUrl
+      }))
+      setFotos(urls)
+    }
+    setLoading(false)
+  }
+
+  useEffect(() => { cargar() }, [sitioId])
+  return { fotos, loading, recargar: cargar }
+}
+
+const FotosModal = ({ sitioId, sitioNombre, onClose, soloVer = false }) => {
+  const { fotos, loading, recargar } = useFotosSitio(sitioId)
+  const [uploading, setUploading] = useState(false)
+  const [fotoGrande, setFotoGrande] = useState(null)
+
+  const subir = async (e) => {
+    const files = Array.from(e.target.files)
+    if (!files.length) return
+    if (fotos.length + files.length > 4) { alert('Máximo 4 fotos por sitio'); return }
+    setUploading(true)
+    for (const file of files) {
+      const ext  = file.name.split('.').pop().toLowerCase()
+      const name = Date.now() + '_' + Math.random().toString(36).slice(2) + '.' + ext
+      await supabase.storage.from('sitio-fotos').upload(sitioId + '/' + name, file, { upsert: false })
+    }
+    await recargar()
+    setUploading(false)
+    e.target.value = ''
+  }
+
+  const eliminar = async (foto) => {
+    if (!window.confirm('¿Eliminar esta foto?')) return
+    await supabase.storage.from('sitio-fotos').remove([sitioId + '/' + foto.name])
+    await recargar()
+  }
+
+  return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
+      <div style={{background:'#fff',borderRadius:12,padding:28,maxWidth:600,width:'100%',boxShadow:'0 20px 60px #0004'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
+          <div>
+            <div style={{fontWeight:700,fontSize:17,color:BK}}>Fotos del sitio</div>
+            <div style={{fontSize:12,color:'#6B7280',marginTop:2}}>{sitioNombre} · {fotos.length}/4 fotos</div>
+          </div>
+          <button onClick={onClose} style={{background:'none',border:'none',cursor:'pointer',fontSize:20,color:'#9CA3AF',padding:4}}>✕</button>
+        </div>
+
+        {loading ? (
+          <div style={{textAlign:'center',padding:32,color:'#9CA3AF',fontSize:13}}>Cargando fotos...</div>
+        ) : (
+          <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:12,marginBottom:20}}>
+            {fotos.map((f, i) => (
+              <div key={i} style={{position:'relative',borderRadius:8,overflow:'hidden',border:'1px solid #E5E7EB',cursor:'pointer'}} onClick={()=>setFotoGrande(f.url)}>
+                <img src={f.url} alt={'Foto ' + (i+1)} style={{width:'100%',height:160,objectFit:'cover',display:'block'}} />
+                {!soloVer && (
+                  <button onClick={e=>{e.stopPropagation();eliminar(f)}}
+                    style={{position:'absolute',top:6,right:6,background:'rgba(220,38,38,.85)',color:'#fff',border:'none',borderRadius:4,padding:'3px 8px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                    Eliminar
+                  </button>
+                )}
+              </div>
+            ))}
+            {fotos.length === 0 && (
+              <div style={{gridColumn:'1/-1',textAlign:'center',padding:32,color:'#9CA3AF',fontSize:13}}>
+                Sin fotos. {!soloVer && 'Sube hasta 4 imágenes del sitio.'}
+              </div>
+            )}
+          </div>
+        )}
+
+        {!soloVer && fotos.length < 4 && (
+          <label style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,background:G,color:'#fff',borderRadius:7,padding:'10px 20px',fontWeight:700,fontSize:14,cursor:'pointer'}}>
+            {uploading ? '⏳ Subiendo...' : '📷 Subir foto'}
+            <input type="file" accept="image/*" multiple style={{display:'none'}} disabled={uploading} onChange={subir} />
+          </label>
+        )}
+        {soloVer && (
+          <button onClick={onClose} style={{width:'100%',background:'#1A1A1A',color:'#fff',border:'none',borderRadius:7,padding:'10px 0',fontWeight:700,fontSize:14,cursor:'pointer'}}>Cerrar</button>
+        )}
+      </div>
+
+      {fotoGrande && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1100}} onClick={()=>setFotoGrande(null)}>
+          <img src={fotoGrande} alt="Foto ampliada" style={{maxWidth:'90vw',maxHeight:'90vh',borderRadius:8,objectFit:'contain'}} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 const SitesMapLeaflet = ({ sites = SITES, height = 520, zoom = 7, center = [-34.2, -70.85], showPopup = true }) => {
   const leafletReady = useLeaflet()
   const ref  = useRef(null)
@@ -531,6 +636,7 @@ const SitesMapLeaflet = ({ sites = SITES, height = 520, zoom = 7, center = [-34.
               ${site.restriccionHorario ? `<span style="padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;background:#F59E0B22;color:#FBBF24;font-family:monospace">⏰ ${site.restriccionHorario.inicio}–${site.restriccionHorario.fin}</span>` : ''}
             </div>
             <div style="margin-top:10px;font-size:11px;color:#9CA3AF">${site.propietario}</div>
+            <button onclick="window._atpVerFotos && window._atpVerFotos('${site.id}','${site.nombre}')" style="margin-top:10px;width:100%;background:#C9A84C;color:#fff;border:none;border-radius:6px;padding:7px 0;font-weight:700;font-size:12px;cursor:pointer;font-family:'IBM Plex Sans',sans-serif">📷 Ver fotos</button>
           </div>`,
           { maxWidth: 260 }
         )
@@ -610,6 +716,7 @@ const SitesMapRelieve = ({ sites = SITES, height = 580, criticalIds = [] }) => {
    ════════════════════════════════════════════════════════════ */
 const TabMapa = ({ sols = [] }) => {
   const [filter, setFilter]     = useState('todos')
+  const [fotosMapSite, setFotosMapSite] = useState(null)
   const [tileMode, setTileMode] = useState('claro')  // 'claro' | 'relieve'
   const [tablaQ, setTablaQ]     = useState('')
   const [tablaRegion, setTablaRegion] = useState('')
@@ -655,8 +762,15 @@ const TabMapa = ({ sols = [] }) => {
   const tablaTotalPg = Math.ceil(tablaFiltered.length / TABLA_PP)
   const tablaPaged   = tablaFiltered.slice((tablaPg-1)*TABLA_PP, tablaPg*TABLA_PP)
 
+  // Register global click handler for popup fotos button
+  useEffect(() => {
+    window._atpVerFotos = (id, nombre) => setFotosMapSite({ id, nombre })
+    return () => { delete window._atpVerFotos }
+  }, [])
+
   return (
     <div className="fade-up" style={{ padding: 28 }}>
+      {fotosMapSite && <FotosModal sitioId={fotosMapSite.id} sitioNombre={fotosMapSite.nombre} onClose={()=>setFotosMapSite(null)} soloVer={true} />}
       {/* Controles */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', background: '#F3F4F6', borderRadius: 9, padding: 3, gap: 2 }}>
@@ -1316,6 +1430,7 @@ const TabSitios = () => {
   const [cfg, setCfg]         = useState({})   // sitiosConfig desde Supabase
   const [form, setForm]       = useState({})
   const [saving, setSaving]   = useState(false)
+  const [fotosModal, setFotosModal] = useState(null)
   const [saved, setSaved]     = useState(false)
 
   useEffect(() => {
@@ -1640,9 +1755,14 @@ const TabSitios = () => {
               )}
             </div>
 
-            <Btn variant="primary" onClick={save} style={{ alignSelf: 'flex-start', minWidth: 160 }}>
-              {saving ? 'Guardando…' : saved ? '✓ Guardado' : 'Guardar cambios'}
-            </Btn>
+            <div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}}>
+              <Btn variant="primary" onClick={save} style={{ minWidth: 160 }}>
+                {saving ? 'Guardando…' : saved ? '✓ Guardado' : 'Guardar cambios'}
+              </Btn>
+              <button onClick={()=>setFotosModal(sel)} style={{background:'#F1F5F9',border:'1px solid #E5E7EB',borderRadius:6,padding:'9px 18px',fontWeight:700,fontSize:13,cursor:'pointer',color:BK}}>
+                📷 Fotos del sitio
+              </button>
+            </div>
           </div>
         </Card>
       ) : (
@@ -1652,6 +1772,7 @@ const TabSitios = () => {
           <div style={{ fontSize: 13 }}>Busca y selecciona un sitio para editar sus datos de contacto y configurar WhatsApp.</div>
         </Card>
       )}
+      {fotosModal && <FotosModal sitioId={fotosModal.id} sitioNombre={fotosModal.nombre} onClose={()=>setFotosModal(null)} />}
     </div>
   )
 }
