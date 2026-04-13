@@ -1213,7 +1213,7 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, s
             {showEmpresaDrop && empresaBusq.length >= 2 && empresasFiltradas.length === 0 && (
               <div style={{position:'absolute',top:'100%',left:0,right:0,background:C.white,border:`1px solid ${C.border}`,borderRadius:4,padding:'10px 14px',zIndex:200,boxShadow:'0 4px 12px #0002'}}>
                 <div style={{fontSize:12,color:C.textS,marginBottom:6}}>No encontrada.</div>
-                <button onMouseDown={()=>{setShowEmpresaDrop(false);setShowNuevaEmpresa(true);setNuevaEmpresa({rut:'',nombre:empresaBusq})}} style={{background:C.blue,color:'#fff',border:'none',borderRadius:3,padding:'4px 12px',fontSize:11,fontWeight:700,cursor:'pointer'}}>+ Crear "{empresaBusq}"</button>
+
               </div>
             )}
           </div>

@@ -344,15 +344,15 @@ const TabSolicitudes = ({ sols, setSols }) => {
   const [motivo, setMotivo] = useState('')
 
   const approve = async id => {
-    await supabaseUpdateEstado(id, 'APROBADA')
-    setSols(p => p.map(s => s.id === id ? { ...s, estado: 'APROBADA' } : s))
-    if (sel?.id === id) setSel(p => ({ ...p, estado: 'APROBADA' }))
+    await supabaseUpdateEstado(id, 'Autorizado')
+    setSols(p => p.map(s => s.id === id ? { ...s, estado: 'Autorizado' } : s))
+    if (sel?.id === id) setSel(p => ({ ...p, estado: 'Autorizado' }))
   }
   const reject = async id => {
     if (!motivo.trim()) return
-    await supabaseUpdateEstado(id, 'RECHAZADA', { motivo_rechazo: motivo })
-    setSols(p => p.map(s => s.id === id ? { ...s, estado: 'RECHAZADA', motivoRechazo: motivo } : s))
-    if (sel?.id === id) setSel(p => ({ ...p, estado: 'RECHAZADA', motivoRechazo: motivo }))
+    await supabaseUpdateEstado(id, 'Rechazado', { motivo_rechazo: motivo })
+    setSols(p => p.map(s => s.id === id ? { ...s, estado: 'Rechazado', motivoRechazo: motivo } : s))
+    if (sel?.id === id) setSel(p => ({ ...p, estado: 'Rechazado', motivoRechazo: motivo }))
     setRechModal(null); setMotivo('')
   }
 
@@ -441,7 +441,7 @@ const TabSolicitudes = ({ sols, setSols }) => {
                   <div style={{ fontSize: 13, color: '#7F1D1D' }}>{sel.motivoRechazo}</div>
                 </div>
               )}
-              {sel.estado === 'EN REVISIÓN' && (
+              {['EN REVISIÓN','Enviado','En Gestión Propietario','Validado','En Validación'].includes(sel.estado) && (
                 <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
                   <Btn variant="ghost" onClick={() => approve(sel.id)}
                     style={{ flex: 1, justifyContent: 'center', background: '#DCFCE7', color: '#15803D', borderColor: '#86EFAC', fontWeight: 700 }}>
@@ -1661,17 +1661,24 @@ const TabEmpresasClientes = () => {
   const [modalCliente, setModalCliente] = useState(false)
   const [nuevoId, setNuevoId]         = useState('')
   const [uploadingFor, setUploadingFor] = useState(null)
+  const [nombresClientes, setNombresClientes] = useState({})
   const [expandido, setExpandido]     = useState({})
 
   const cargar = () => {
     supabase.from('empresas_contratistas').select('cliente_id,nombre,rut').order('cliente_id').then(({ data: rows }) => {
       if (rows) {
         const grouped = {}
+        const nombres = {}  // cliente_id → nombre legible del placeholder
         rows.forEach(r => {
           if (!grouped[r.cliente_id]) grouped[r.cliente_id] = []
-          grouped[r.cliente_id].push({ nombre: r.nombre, rut: r.rut })
+          if (r.rut === '__placeholder__') {
+            nombres[r.cliente_id] = r.nombre  // guardar nombre original
+          } else {
+            grouped[r.cliente_id].push({ nombre: r.nombre, rut: r.rut })
+          }
         })
         setData(grouped)
+        setNombresClientes(nombres)
       }
       setLoading(false)
     })
@@ -1679,9 +1686,13 @@ const TabEmpresasClientes = () => {
 
   useEffect(() => { cargar() }, [])
 
-  const agregarCliente = () => {
-    const id = nuevoId.trim().toLowerCase().replace(/\s+/g, '_')
-    if (!id || data[id] !== undefined) return
+  const agregarCliente = async () => {
+    const raw = nuevoId.trim()
+    if (!raw) return
+    const id = raw.toLowerCase().replace(/\s+/g, '_')
+    if (data[id] !== undefined) return
+    // Insertar fila placeholder en Supabase para que el cliente persista
+    await supabase.from('empresas_contratistas').insert({ cliente_id: id, nombre: raw, rut: '__placeholder__' })
     setData(p => ({ ...p, [id]: [] }))
     setNuevoId('')
     setModalCliente(false)
@@ -1776,7 +1787,7 @@ const TabEmpresasClientes = () => {
                       {abierto ? '▼' : '▶'}
                     </button>
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: 15, color: BK }}>{clienteId}</div>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: BK }}>{nombresClientes[clienteId] || clienteId}</div>
                       <div style={{ fontSize: 12, color: '#9CA3AF' }}>{empresas.length} empresa{empresas.length !== 1 ? 's' : ''} habilitada{empresas.length !== 1 ? 's' : ''}</div>
                     </div>
                   </div>
