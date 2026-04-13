@@ -877,11 +877,14 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, s
       if (form.horaInicio < rh.hora_desde) { showNotif(`❌ Hora de ingreso fuera del rango permitido. Mínimo: ${rh.hora_desde}`, 'error'); return }
       if (form.horaFin > rh.hora_hasta) { showNotif(`❌ Hora de salida fuera del rango permitido. Máximo: ${rh.hora_hasta}`, 'error'); return }
     }
-    // Bloquear si hay conflicto de fechas
-    const conflicto = hayConflictoFechas(form.desde, form.hasta)
-    if (conflicto) {
-      showNotif(`❌ Fechas en conflicto con solicitud ${conflicto.id} (${conflicto.desde} → ${conflicto.hasta})`, 'error')
-      return
+    // Bloquear si hay conflicto de fechas (no aplica para emergencias)
+    const esEmergencia = form.trabajo?.includes('EMERGENCIA')
+    if (!esEmergencia) {
+      const conflicto = hayConflictoFechas(form.desde, form.hasta)
+      if (conflicto) {
+        showNotif(`❌ Fechas en conflicto con solicitud ${conflicto.id} (${conflicto.desde} → ${conflicto.hasta})`, 'error')
+        return
+      }
     }
     // Validar reglas del sitio
     if (form.desde && form.hasta && form.sitio) {
@@ -962,11 +965,12 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, s
             motivo_no_acreditado: 'Pendiente revisión',
           }
           try {
-            await supabase.from('trabajadores_acreditados').upsert(
-              { rut: nuevo.rut, nombre: nuevo.nombre, empresa_nombre: nuevo.empresa_nombre, operador: nuevo.operador, acreditado: null, vencimiento: '', motivo_no_acreditado: 'Pendiente revisión' },
+            const { error: upsertErr } = await supabase.from('trabajadores_acreditados').upsert(
+              { id: nuevo.id, rut: nuevo.rut, nombre: nuevo.nombre, empresa_nombre: nuevo.empresa_nombre, operador: nuevo.operador, acreditado: null, vencimiento: '', motivo_no_acreditado: 'Pendiente revisión' },
               { onConflict: 'rut' }
             )
-            getTrabajadores().then(trabs => setTrabajadores(trabs))
+            if (upsertErr) console.error('upsert trabajador error:', upsertErr)
+            else getTrabajadores().then(trabs => setTrabajadores(trabs))
           } catch(err) { console.error('upsert trabajador:', err) }
         }
       }
