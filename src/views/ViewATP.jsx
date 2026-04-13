@@ -2230,7 +2230,10 @@ const TabTecnicos = () => {
   return (
     <div className="fade-up" style={{ padding: 28 }}>
       <Card style={{ overflow: 'hidden' }}>
-        <CardHeader title="Base de datos de técnicos" icon={Ic.users} />
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid #F0F0F0', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Ic.users w={16} h={16} style={{ color: G }} />
+          <span style={{ fontWeight: 700, fontSize: 14, color: BK }}>Base de datos de técnicos</span>
+        </div>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #F0F0F0', display: 'flex', alignItems: 'center', gap: 12 }}>
           <input value={busq} onChange={e => setBusq(e.target.value)} placeholder="Buscar por nombre o RUT..."
             style={{ flex: 1, padding: '8px 12px', borderRadius: 6, border: '1px solid #E5E7EB', fontSize: 13, fontFamily: 'IBM Plex Sans', outline: 'none' }} />
