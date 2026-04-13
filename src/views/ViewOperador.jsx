@@ -966,12 +966,13 @@ function FormNuevaSolicitud({ user, solicitudes, setSolicitudes, trabajadores, s
             motivo_no_acreditado: 'Pendiente revisión',
           }
           try {
-            const { error: upsertErr } = await supabase.from('trabajadores_acreditados').upsert(
-              { id: nuevo.id, rut: nuevo.rut, nombre: nuevo.nombre, empresa_nombre: nuevo.empresa_nombre, operador: nuevo.operador, acreditado: null, vencimiento: '', motivo_no_acreditado: 'Pendiente revisión' },
-              { onConflict: 'rut' }
-            )
-            if (upsertErr) console.error('upsert trabajador error:', upsertErr)
-            else getTrabajadores().then(trabs => setTrabajadores(trabs))
+            const { error: insErr } = await supabase.from('trabajadores_acreditados').insert({
+              id: nuevo.id, rut: nuevo.rut, nombre: nuevo.nombre,
+              empresa_nombre: nuevo.empresa_nombre, operador: nuevo.operador,
+              acreditado: null, vencimiento: '', motivo_no_acreditado: 'Pendiente revisión'
+            })
+            if (insErr && insErr.code !== '23505') console.error('insert trabajador error:', insErr)
+            getTrabajadores().then(trabs => setTrabajadores(trabs))
           } catch(err) { console.error('upsert trabajador:', err) }
         }
       }
