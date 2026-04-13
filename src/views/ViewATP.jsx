@@ -2208,6 +2208,7 @@ const SECTIONS = {
   historial:   { title: 'Historial y Reportes',  sub: 'Trazabilidad de visitas y accesos' },
   config:      { title: 'Configuración',         sub: 'API Key, variables de entorno y sistema' },
   alertas:     { title: '🚨 Alertas Operativas',   sub: 'Técnicos bloqueados · Reclamos · Anomalías detectadas' },
+  tecnicos:    { title: 'Técnicos Acreditados',    sub: 'Base de datos de personal técnico registrado en la plataforma' },
 }
 
 /* ════════════════════════════════════════════════════════════
