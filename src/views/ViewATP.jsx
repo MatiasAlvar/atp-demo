@@ -1463,7 +1463,16 @@ const TabSitios = () => {
       nota:           c.nota          || '',
       bloqueado:      c.bloqueado     ?? false,
       motivo_bloqueo: c.motivo_bloqueo || '',
-      docs_requeridos: c.docs_requeridos || [],
+      docs_requeridos: (() => {
+        // Filtrar docs fantasma: solo conservar los que siguen activos en el listado global
+        const globalElim = cfg['__GLOBAL__']?.docs_eliminados || []
+        const globalCustom = cfg['__GLOBAL__']?.docs_requeridos || []
+        const activeDocs = [
+          ...(TIPOS_DOCS_SITIO||[]).filter(d => !globalElim.includes(d)),
+          ...globalCustom
+        ]
+        return (c.docs_requeridos || []).filter(d => activeDocs.includes(d))
+      })(),
       restriccion_activa:  c.restriccion_horaria?.activa    ?? false,
       restriccion_desde:   c.restriccion_horaria?.hora_desde || '',
       restriccion_hasta:   c.restriccion_horaria?.hora_hasta || '',
