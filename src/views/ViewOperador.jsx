@@ -77,6 +77,7 @@ export default function ViewOperador({ user, onLogout }) {
     cargarAlertas()
     const ch = supabase.channel('op-' + Math.random())
       .on('postgres_changes', { event:'*', schema:'public', table:'solicitudes' }, cargar)
+      .on('postgres_changes', { event:'*', schema:'public', table:'sitios_config' }, () => { getSitiosConfig().then(setSitiosConfig) })
       .subscribe()
     return () => supabase.removeChannel(ch)
   }, [])

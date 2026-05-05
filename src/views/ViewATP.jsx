@@ -1507,7 +1507,30 @@ const TabSitios = () => {
         solo_habiles: form.restriccion_habiles,
       },
     })
-    setCfg(p => ({ ...p, [sel.id]: { ...form, sitio_id: sel.id } }))
+    setCfg(p => ({ ...p, [sel.id]: {
+      sitio_id:       sel.id,
+      propietario:    form.propietario,
+      contacto:       form.contacto,
+      tel:            form.tel,
+      email:          form.email,
+      whatsapp:       form.whatsapp,
+      correo_activo:  form.correo_activo,
+      nota:           form.nota,
+      bloqueado:      form.bloqueado,
+      motivo_bloqueo: form.motivo_bloqueo || '',
+      docs_requeridos: form.docs_requeridos || [],
+      liberacion_auto: {
+        activa:   form.liberacion_activa,
+        trabajos: form.liberacion_trabajos || [],
+      },
+      restriccion_horaria: {
+        activa:       form.restriccion_activa,
+        hora_desde:   form.restriccion_desde,
+        hora_hasta:   form.restriccion_hasta,
+        dias:         form.restriccion_dias || [],
+        solo_habiles: form.restriccion_habiles,
+      },
+    } }))
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
