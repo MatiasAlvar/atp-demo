@@ -947,10 +947,18 @@ CALIDAD DE RESPUESTAS:
 - Sé específico: usa nombres, fechas exactas y RUTs cuando los tengas
 - Ante dudas de seguridad: indica que los técnicos tienen documentación al día
 - Respuestas entre 2 y 5 oraciones — ni muy cortas ni muy largas
-- Lenguaje profesional pero cercano, sin tecnicismos innecesarios`
+- Lenguaje profesional pero cercano, sin tecnicismos innecesarios
+- IMPORTANTE: NO uses formato markdown. Nada de **negrita**, *cursiva*, ni # encabezados. Solo texto plano.`
 }
 
 const PENDING_ESTADO = ['BORRADOR', 'ENVIADA', 'EN REVISIÓN']
+
+// Limpia markdown del texto del bot (evita **negrita** visible)
+const stripMd = t => (t||'')
+  .replace(/\*\*(.+?)\*\*/gs, '$1')
+  .replace(/\*(.+?)\*/gs, '$1')
+  .replace(/__(.+?)__/gs, '$1')
+  .replace(/_(.+?)_/gs, '$1')
 
 const WaBubble = ({ msg }) => {
   const isBot  = msg.from === 'bot'
@@ -989,7 +997,7 @@ const WaBubble = ({ msg }) => {
         boxShadow: '0 1px 3px rgba(0,0,0,.2)',
         whiteSpace: 'pre-wrap',
       }}>
-        {msg.text}
+        {isBot ? stripMd(msg.text) : msg.text}
         <div style={{ fontSize: 10, color: 'rgba(233,237,240,.4)', marginTop: 4, textAlign: 'right' }}>
           {msg.time}
         </div>
@@ -1192,7 +1200,17 @@ const TabWhatsApp = ({ sols, setSols }) => {
   const updateEstado = useCallback(async (id, estado, extra = {}) => {
     await supabaseUpdateEstado(id, estado, extra)
     setSols(p => p.map(s => s.id === id ? { ...s, estado, ...extra } : s))
-  }, [setSols])
+    // Enviar correo de autorización cuando se autoriza desde WhatsApp IA
+    if (estado === 'Autorizado') {
+      try {
+        const sol = sols.find(s => s.id === id)
+        if (sol) {
+          const { enviarCorreoAutorizacion } = await import('../lib/email.js')
+          await enviarCorreoAutorizacion({ solicitud: { ...sol, estado: 'Autorizado' } })
+        }
+      } catch(e) { console.error('Email autorización WhatsApp:', e) }
+    }
+  }, [setSols, sols])
 
   const saveKey = () => {
     localStorage.setItem('atp_apikey', apiKey)
